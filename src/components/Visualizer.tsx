@@ -75,8 +75,8 @@ export default function Visualizer() {
             mountRef.current.appendChild(renderer.domElement);
 
             const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(0, -10, 10);
-            //camera.rotation.x = -Math.PI / 2;
+            camera.position.set(0, 5, 35);
+            // camera.rotation.x = -Math.PI / 2;
 
             // Add OrbitControls for rotation
             const controls = new OrbitControls(camera, renderer.domElement);
@@ -98,14 +98,15 @@ export default function Visualizer() {
 
             const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
             bloomPass.threshold = 0;
-            bloomPass.strength = 1.0; // Bloom intensity
-            bloomPass.radius = 0.5;
+            bloomPass.strength = 0.3; // Bloom intensity
+            bloomPass.radius = 0.2;
             composer.addPass(bloomPass);
 
             const loader = new GLTFLoader();
-            loader.load("/models/delorean.gltf", (gltf) => {
+            loader.load("/models/carModel.gltf", (gltf) => {
                 const model = gltf.scene;
-                model.userData.initialPosition = new THREE.Vector3(-12, -1, 0);
+                // model.userData.initialPosition = new THREE.Vector3(-12, -1, 0);
+                model.userData.initialPosition = new THREE.Vector3(-0, -0, 25);
                 model.position.copy(model.userData.initialPosition); // Set initial position
 
                 //model.position.set(-12, -1, 0);
@@ -128,19 +129,55 @@ export default function Visualizer() {
             const heightSegments = 50;
             const geometry = new THREE.PlaneGeometry(width, height, widthSegments, heightSegments);
 
-            // Set material to allow vertex colors
-            const material = new THREE.MeshBasicMaterial({ vertexColors: true, wireframe: true });
-            const plane = new THREE.Mesh(geometry, material);
-            plane.rotation.x = -Math.PI / 2;
-            scene.add(plane);
+            // Remove index to allow unique face colors
+            geometry.deleteAttribute("index");
+
+            // Set material to support per-face coloring (for faces only)
+            const faceMaterial = new THREE.MeshBasicMaterial({ vertexColors: true });
+
+            // Set material for wireframe (for grid lines and vertices)
+            const wireframeMaterial = new THREE.MeshBasicMaterial({ 
+                color: 0x000000, // Grid line color
+                wireframe: true, 
+                wireframeLinewidth: 1 
+            });
+
+            // Create color array for faces
+            const colors = [];
+            const faceCount = geometry.attributes.position.count / 3; // Each face has 3 vertices
+
+            for (let i = 0; i < faceCount; i++) {
+                const color = new THREE.Color(Math.random(), Math.random(), Math.random()); // Random color per face
+                for (let j = 0; j < 3; j++) {
+                    colors.push(color.r, color.g, color.b);
+                }
+            }
+
+            // Apply face colors
+            geometry.setAttribute("color", new THREE.BufferAttribute(new Float32Array(colors), 3));
+
+            // Mesh for colored faces
+            const planeWithColor = new THREE.Mesh(geometry, faceMaterial);
+            planeWithColor.rotation.x = -Math.PI / 2;
+            scene.add(planeWithColor); // Adds colored plane
+
+            // Mesh for wireframe/grid lines
+            const planeWireframe = new THREE.Mesh(geometry, wireframeMaterial);
+            planeWireframe.rotation.x = -Math.PI / 2;
+            scene.add(planeWireframe); // Adds colored grid
 
             // Initialize vertex colors
-            const colors = [];
             const vertexCount = geometry.attributes.position.count;
             for (let i = 0; i < vertexCount; i++) {
                 colors.push(0, 0, 0);
             }
             geometry.setAttribute("color", new THREE.BufferAttribute(new Float32Array(colors), 3));
+
+            // // Uncomment this if wants colored grid only and comment adding colored plane code
+            // const material = new THREE.MeshBasicMaterial({ vertexColors: true, wireframe: true });
+            // const plane = new THREE.Mesh(geometry, material);
+            // plane.rotation.x = -Math.PI / 2;
+            // scene.add(plane);
 
             // SUN with scanned lines
             const circleGeometry = new THREE.PlaneGeometry(50, 50, 64, 64);
@@ -199,8 +236,14 @@ export default function Visualizer() {
                     
                         carRef.current.position.x = THREE.MathUtils.lerp(
                             carRef.current.position.x,
-                            originalPos.x - (mid * 20 - 10), // Increased magnitude (was 10, now 20)
+                            originalPos.x - treble * 10 +  subBass * 5 , // Car movement in x axis
                             0.02 // Increased interpolation speed (was 0.01, now 0.02)
+                        );
+
+                        carRef.current.position.z = THREE.MathUtils.lerp(
+                            carRef.current.position.z,
+                            originalPos.z - subBass * 12 + bass * 8, // Car movement in x axis
+                            0.04 // Increased interpolation speed (was 0.01, now 0.02)
                         );
                     }
                     
@@ -215,12 +258,17 @@ export default function Visualizer() {
 
                         // Set HSL color (Blue -> Red Gradient)
                         const color = new THREE.Color();
-                        color.setHSL(0.7 - normalizedZ * 0.7, 1, 0.5);
+                        if (y >= 45 || y <= -45 ) {
+                            color.setRGB(0, 0, 0); // Set color to red
+                        } else {
+                            color.setHSL(0.7 - normalizedZ * 0.7, 1, 0.5); // Default gradient
+                        }
+                    
                         colorAttr.setXYZ(i, color.r, color.g, color.b);
 
                         // Section-based movement logic
                         let heightOffset = 0;
-                        const adjustedX = x + width / 3;
+                        const adjustedX = x + width / 3.2;
                         let col = adjustedX < width / 4 ? 0 : adjustedX < width / 4 + width / 8 ? 1 : 2;
                         const row = Math.floor((y + height / 2) / (height / 3));
 
