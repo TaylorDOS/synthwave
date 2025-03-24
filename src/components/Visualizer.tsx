@@ -76,7 +76,6 @@ export default function Visualizer() {
 
             const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
             camera.position.set(0, 5, 35);
-            // camera.rotation.x = -Math.PI / 2;
 
             // Add OrbitControls for rotation
             const controls = new OrbitControls(camera, renderer.domElement);
@@ -84,6 +83,8 @@ export default function Visualizer() {
             controls.dampingFactor = 0.05;
             controls.rotateSpeed = 0.5;
             controls.enableZoom = true; // Allow zooming
+            controls.minDistance = 5; 
+            controls.maxDistance = 50;
             controls.enablePan = true; // Allow panning (moving camera)
             controls.maxPolarAngle = Math.PI / 2;
 
@@ -259,7 +260,11 @@ export default function Visualizer() {
                         // Set HSL color (Blue -> Red Gradient)
                         const color = new THREE.Color();
                         if (y >= 45 || y <= -45 ) {
-                            color.setRGB(0, 0, 0); // Set color to red
+                            color.setRGB(0, 0, 0); 
+                            color.lerp(new THREE.Color(0, 0, 0), 0);
+
+                            faceMaterial.opacity = 0;  
+                            wireframeMaterial.opacity = 0;
                         } else {
                             color.setHSL(0.7 - normalizedZ * 0.7, 1, 0.5); // Default gradient
                         }
@@ -292,7 +297,7 @@ export default function Visualizer() {
 
                         // If y position goes below -50, reset to 50
                         if (position.getY(i) < -50) {
-                            position.setY(i, 50);
+                            position.setY(i, 49.9);
                         }
 
                         if (position.getY(i) >= 47) {
@@ -409,12 +414,67 @@ export default function Visualizer() {
         event.preventDefault();
     };
 
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const [isGridVisible, setIsGridVisible] = useState(false);
+    const [isFacesVisible, setIsFacesVisible] = useState(false);
+    const [colorPalette, setColorPalette] = useState("#ffffff"); 
+    const [bloomStrength, setBloomStrength] = useState(1);
+    const [bloomRadius, setBloomRadius] = useState(1);
+    const [bloomThreshold, setBloomThreshold] = useState(0.5);
+    const [scanlineOpacity, setScanlineOpacity] = useState(1);
+
+    // Function to toggle the grid visibility when checkbox is clicked
+    const handleGridToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setIsGridVisible(e.target.checked);
+        // need to add logic 
+    };
+
+    // Function to toggle the faces visibility when checkbox is clicked
+    const handleFacesToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setIsFacesVisible(e.target.checked);
+        // need to add logic 
+    };
+
+    // Function to handle color change
+    const handleColorChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setColorPalette(e.target.value);
+        // need to add logic 
+    };
+
+    // Handle the bloom strength change
+    const handleBloomStrengthChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setBloomStrength(parseFloat(e.target.value));
+        // need to add logic 
+    };
+
+    // Handle the bloom radius change
+    const handleBloomRadiusChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setBloomRadius(parseFloat(e.target.value));
+        // need to add logic 
+    };
+
+    // Handle the bloom threshold change
+    const handleBloomThresholdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setBloomThreshold(parseFloat(e.target.value));
+        // need to add logic 
+    };
+
+    // Handle the scanline opacity change
+    const handleScanlineOpacityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setScanlineOpacity(parseFloat(e.target.value));
+        // need to add logic 
+    };
+
+    // Function to toggle the settings popup visibility
+    const toggleSettingsPopup = (e: React.MouseEvent<HTMLButtonElement>) => {
+        setIsSettingsOpen((prev) => !prev);
+    };
+
     return (
         <div className="w-screen h-screen relative" onDragOver={handleDragOver} onDrop={handleDrop}>
             
             <div ref={mountRef} className="absolute inset-0 w-full h-full"></div>
 
-            
             <div className="absolute top-5 left-1/2 transform -translate-x-1/2 flex flex-col items-center p-4 rounded-xl shadow-lg">
                 <h1 className="text-2xl font-bold text-white">Synthwave Music Player</h1>
                 <p className="text-white text-sm mb-4">Drag and drop an audio file</p>    
@@ -435,7 +495,112 @@ export default function Visualizer() {
                 </div>
             </div>
 
-            
+            <div className="absolute top-5 flex flex-col items-center p-4 rounded-xl shadow-lg">
+                <button
+                    onClick={toggleSettingsPopup}
+                    className={`px-6 py-3 text-md font-bold rounded-md shadow-lg transition duration-300 "text-white bg-orange-600 hover:bg-orange-700 active:scale-95 cursor-pointer"}`}>
+                    {"Setting"}
+                </button>
+            </div>
+
+            {isSettingsOpen && (
+                <div className="absolute top-20 m-4 p-4 gap-1 bg-orange-500 text-white rounded-xl z-20 flex flex-col">
+                    <div className="flex gap-5">
+                        <div>
+                            <label>
+                                <input
+                                    className ="mr-2"
+                                    type="checkbox"
+                                    checked={isGridVisible}
+                                    onChange={handleGridToggle}
+                                />
+                                Show Grid
+                            </label>
+                        </div>
+                        <div>
+                            <label>
+                                <input
+                                    className ="mr-2"
+                                    type="checkbox"
+                                    checked={isFacesVisible}
+                                    onChange={handleFacesToggle}
+                                />
+                                Show Faces
+                            </label>
+                        </div>
+                    </div>
+                    <label>
+                        Color Picker
+                        <input 
+                            type="color" 
+                            value={colorPalette} 
+                            onChange={handleColorChange} 
+                            style={{ marginLeft: "10px" }}
+                        />
+                    </label>
+                    <div>
+                        <label>
+                            Bloom Strength:
+                            <input 
+                            className ="ml-2"
+                            type="range"
+                            min="0"
+                            max="2"
+                            step="0.1"
+                            value={bloomStrength}
+                            onChange={(e) => setBloomStrength(parseFloat(e.target.value))}
+                            />
+                        </label>
+                        </div>
+                        <div>
+                        <label>
+                            Bloom Radius:
+                            <input
+                            className ="ml-2"
+                            type="range"
+                            min="0"
+                            max="2"
+                            step="0.1"
+                            value={bloomRadius}
+                            onChange={(e) => setBloomRadius(parseFloat(e.target.value))}
+                            />
+                        </label>
+                        </div>
+                        <div>
+                        <label>
+                            Bloom Threshold:
+                            <input
+                            className ="ml-2"
+                            type="range"
+                            min="0"
+                            max="1"
+                            step="0.05"
+                            value={bloomThreshold}
+                            onChange={(e) => setBloomThreshold(parseFloat(e.target.value))}
+                            />
+                        </label>
+                        </div>
+                        <div>
+                        <label>
+                            Scanline Opacity:
+                            <input
+                            className ="ml-2"
+                            type="range"
+                            min="0"
+                            max="1"
+                            step="0.05"
+                            value={scanlineOpacity}
+                            onChange={(e) => setScanlineOpacity(parseFloat(e.target.value))}
+                            />
+                        </label>
+                        </div>
+
+                    <button onClick={toggleSettingsPopup} style={{ marginTop: "20px" }}>
+                        Close
+                    </button>
+                </div>
+            )}
+
             <div className="absolute bottom-10 left-1/2 transform -translate-x-1/2 bg-gray-800/50 text-white p-4 rounded-lg shadow-lg max-w-4xl w-full overflow-y-auto max-h-60 flex flex-col items-center backdrop-blur-lg pointer-events-none">
                 <h3 className="text-center text-lg font-bold mb-2">Equalizer Data</h3>
                 <ul className="list-none text-sm flex flex-row w-full space-x-2">
