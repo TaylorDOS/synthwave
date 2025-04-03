@@ -1,5 +1,9 @@
 "use client";
 
+// TODO: errors abt XYZ thing on console 
+// TODO: base grid and the grid on the plane conflict (only one at once)
+// TODO: more options?
+
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -20,6 +24,29 @@ export default function Visualizer() {
     const scanlineRef = useRef<THREE.Mesh | null>(null);
     const carRef = useRef<THREE.Object3D | null>(null);
     const noise2D = createNoise2D();
+    
+    const scene = new THREE.Scene();
+    // const bloomPass = new UnrealBloomPass(new THREE.Vector2(1024, 1024), 1.5, 0.4, 0.85);
+    const bloomPassRef = useRef<UnrealBloomPass | null>(null);
+    const geometry = new THREE.PlaneGeometry(100, 100, 50, 50);
+    const wireframeMaterial = new THREE.MeshBasicMaterial({ 
+        color: 0x000000, 
+        wireframe: true, 
+        wireframeLinewidth: 1 
+    });
+    const faceMaterial = new THREE.MeshBasicMaterial({ vertexColors: true });
+    const gridRef = useRef<THREE.Mesh | null>(null);
+    const facesRef = useRef<THREE.Mesh | null>(null);
+    let bloomStrengthValue = 0.3;
+    let bloomThresholdValue = 0.0;
+    let bloomRadiusValue = 0.2;
+
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const [isGridVisible, setIsGridVisible] = useState(true);
+    const [isFacesVisible, setIsFacesVisible] = useState(true);
+    const [bloomStrength, setBloomStrength] = useState(1);
+    const [bloomRadius, setBloomRadius] = useState(1);
+    const [bloomThreshold, setBloomThreshold] = useState(0.5);
 
     const [frequencyData, setFrequencyData] = useState<{ label: string; value: number }[]>([
         { label: "Sub-Bass", value: 0 },
@@ -61,13 +88,6 @@ export default function Visualizer() {
                 return;
             }
 
-            const scene = new THREE.Scene();
-            // const gridHelper = new THREE.GridHelper(10, 10);
-            // scene.add(gridHelper);
-
-            // const axesHelper = new THREE.AxesHelper(5);
-            // scene.add(axesHelper);
-
             // Set up Renderer
             const renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setPixelRatio(window.devicePixelRatio);
@@ -96,15 +116,26 @@ export default function Visualizer() {
             const composer = new EffectComposer(renderer);
             const renderPass = new RenderPass(scene, camera);
             composer.addPass(renderPass);
+            console.log('this', composer,  renderPass)
 
-            const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
-            bloomPass.threshold = 0;
-            bloomPass.strength = 0.3; // Bloom intensity
-            bloomPass.radius = 0.2;
-            composer.addPass(bloomPass);
+            if (!bloomPassRef.current) {
+                const bloomPass = new UnrealBloomPass(
+                    new THREE.Vector2(window.innerWidth, window.innerHeight),
+                    bloomStrength, 
+                    bloomRadius, 
+                    bloomThreshold
+                  );
+                  bloomPassRef.current = bloomPass; // Store bloomPass reference
+                  composer.addPass(bloomPass);
+            } else {
+                // Update bloom effect dynamically
+                bloomPassRef.current.strength = bloomStrength;
+                bloomPassRef.current.radius = bloomRadius;
+                bloomPassRef.current.threshold = bloomThreshold;
+            }
 
             const loader = new GLTFLoader();
-            loader.load("/models/carModel.gltf", (gltf) => {
+            loader.load("/models/palmTree.gltf", (gltf) => {
                 const model = gltf.scene;
                 // model.userData.initialPosition = new THREE.Vector3(-12, -1, 0);
                 model.userData.initialPosition = new THREE.Vector3(-0, -0, 25);
@@ -126,22 +157,12 @@ export default function Visualizer() {
             // Plane settings
             const width = 100;
             const height = 100;
-            const widthSegments = 50;
-            const heightSegments = 50;
-            const geometry = new THREE.PlaneGeometry(width, height, widthSegments, heightSegments);
+            // const widthSegments = 50;
+            // const heightSegments = 50;
+            // const geometry = new THREE.PlaneGeometry(width, height, widthSegments, heightSegments);
 
             // Remove index to allow unique face colors
             geometry.deleteAttribute("index");
-
-            // Set material to support per-face coloring (for faces only)
-            const faceMaterial = new THREE.MeshBasicMaterial({ vertexColors: true });
-
-            // Set material for wireframe (for grid lines and vertices)
-            const wireframeMaterial = new THREE.MeshBasicMaterial({ 
-                color: 0x000000, // Grid line color
-                wireframe: true, 
-                wireframeLinewidth: 1 
-            });
 
             // Create color array for faces
             const colors = [];
@@ -154,25 +175,25 @@ export default function Visualizer() {
                 }
             }
 
-            // Apply face colors
-            geometry.setAttribute("color", new THREE.BufferAttribute(new Float32Array(colors), 3));
+            // // Apply face colors
+            // geometry.setAttribute("color", new THREE.BufferAttribute(new Float32Array(colors), 3));
 
-            // Mesh for colored faces
-            const planeWithColor = new THREE.Mesh(geometry, faceMaterial);
-            planeWithColor.rotation.x = -Math.PI / 2;
-            scene.add(planeWithColor); // Adds colored plane
+            // // Mesh for colored faces
+            // const planeWithColor = new THREE.Mesh(geometry, faceMaterial);
+            // planeWithColor.rotation.x = -Math.PI / 2;
+            // scene.add(planeWithColor); // Adds colored plane
 
-            // Mesh for wireframe/grid lines
-            const planeWireframe = new THREE.Mesh(geometry, wireframeMaterial);
-            planeWireframe.rotation.x = -Math.PI / 2;
-            scene.add(planeWireframe); // Adds colored grid
+            // // Mesh for wireframe/grid lines
+            // const planeWireframe = new THREE.Mesh(geometry, wireframeMaterial);
+            // planeWireframe.rotation.x = -Math.PI / 2;
+            // scene.add(planeWireframe); // Adds colored grid
 
-            // Initialize vertex colors
-            const vertexCount = geometry.attributes.position.count;
-            for (let i = 0; i < vertexCount; i++) {
-                colors.push(0, 0, 0);
-            }
-            geometry.setAttribute("color", new THREE.BufferAttribute(new Float32Array(colors), 3));
+            // // Initialize vertex colors
+            // const vertexCount = geometry.attributes.position.count;
+            // for (let i = 0; i < vertexCount; i++) {
+            //     colors.push(0, 0, 0);
+            // }
+            // geometry.setAttribute("color", new THREE.BufferAttribute(new Float32Array(colors), 3));
 
             // // Uncomment this if wants colored grid only and comment adding colored plane code
             // const material = new THREE.MeshBasicMaterial({ vertexColors: true, wireframe: true });
@@ -197,6 +218,30 @@ export default function Visualizer() {
             scanlineCircle.position.set(0, 0, -250);
             scene.add(scanlineCircle);
             scanlineRef.current = scanlineCircle;
+            
+            // Create the meshes if they don't exist yet
+            if (!gridRef.current) {
+                gridRef.current = new THREE.Mesh(geometry, wireframeMaterial);
+                gridRef.current.rotation.x = -Math.PI / 2;
+
+                const vertexCount = geometry.attributes.position.count;
+                for (let i = 0; i < vertexCount; i++) {
+                    colors.push(0, 0, 0);
+                }
+                geometry.setAttribute("color", new THREE.BufferAttribute(new Float32Array(colors), 3));
+                
+                scene.add(gridRef.current);
+            }
+
+            if (!facesRef.current) {
+                facesRef.current = new THREE.Mesh(geometry, faceMaterial);
+                facesRef.current.rotation.x = -Math.PI / 2;
+                scene.add(facesRef.current);
+            }
+
+            // Set initial visibility based on state
+            gridRef.current.visible = isGridVisible;
+            facesRef.current.visible = isFacesVisible;
 
             const animate = () => {
                 requestAnimationFrame(animate);
@@ -244,6 +289,12 @@ export default function Visualizer() {
                         carRef.current.position.z = THREE.MathUtils.lerp(
                             carRef.current.position.z,
                             originalPos.z - subBass * 12 + bass * 8, // Car movement in x axis
+                            0.04 // Increased interpolation speed (was 0.01, now 0.02)
+                        );
+
+                        carRef.current.rotation.y = THREE.MathUtils.lerp(
+                            carRef.current.rotation.y,
+                            originalPos.y - subBass * 12 + bass * 8, // Car movement in x axis
                             0.04 // Increased interpolation speed (was 0.01, now 0.02)
                         );
                     }
@@ -342,11 +393,17 @@ export default function Visualizer() {
             return () => {
                 window.removeEventListener("resize", handleResize);
                 mountRef.current?.removeChild(renderer.domElement);
+                if (gridRef.current) scene.remove(gridRef.current);
+                if (facesRef.current) scene.remove(facesRef.current);
+
+                renderer.dispose();
+                renderer.forceContextLoss(); // Releases the WebGL context
+                document.body.removeChild(renderer.domElement);
             };
         }
 
         init();
-    }, []);
+    }, [bloomStrength, bloomRadius, bloomThreshold]);
 
     const handlePlayPause = async () => {
         if (!audioRef.current || !audioFile) return;
@@ -413,59 +470,41 @@ export default function Visualizer() {
     const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
         event.preventDefault();
     };
-
-    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-    const [isGridVisible, setIsGridVisible] = useState(false);
-    const [isFacesVisible, setIsFacesVisible] = useState(false);
-    const [colorPalette, setColorPalette] = useState("#ffffff"); 
-    const [bloomStrength, setBloomStrength] = useState(1);
-    const [bloomRadius, setBloomRadius] = useState(1);
-    const [bloomThreshold, setBloomThreshold] = useState(0.5);
-    const [scanlineOpacity, setScanlineOpacity] = useState(1);
-
-    // Function to toggle the grid visibility when checkbox is clicked
+ 
+    // Toggle grid visibility
     const handleGridToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
         setIsGridVisible(e.target.checked);
-        // need to add logic 
+        if (gridRef.current) {
+            gridRef.current.visible = e.target.checked;
+        }
     };
 
-    // Function to toggle the faces visibility when checkbox is clicked
+    // Toggle faces visibility
     const handleFacesToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
         setIsFacesVisible(e.target.checked);
-        // need to add logic 
+        if (facesRef.current) {
+            facesRef.current.visible = e.target.checked;
+        }
     };
 
-    // Function to handle color change
-    const handleColorChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        setColorPalette(e.target.value);
-        // need to add logic 
-    };
-
-    // Handle the bloom strength change
+    // Handle bloom settings
     const handleBloomStrengthChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setBloomStrength(parseFloat(e.target.value));
-        // need to add logic 
+        bloomStrengthValue = parseFloat(e.target.value);
+        
     };
 
-    // Handle the bloom radius change
     const handleBloomRadiusChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setBloomRadius(parseFloat(e.target.value));
-        // need to add logic 
+        bloomRadiusValue = parseFloat(e.target.value);
     };
 
-    // Handle the bloom threshold change
     const handleBloomThresholdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setBloomThreshold(parseFloat(e.target.value));
-        // need to add logic 
+        bloomThresholdValue = parseFloat(e.target.value);
     };
 
-    // Handle the scanline opacity change
-    const handleScanlineOpacityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        setScanlineOpacity(parseFloat(e.target.value));
-        // need to add logic 
-    };
-
-    // Function to toggle the settings popup visibility
+    // Toggle settings popup
     const toggleSettingsPopup = (e: React.MouseEvent<HTMLButtonElement>) => {
         setIsSettingsOpen((prev) => !prev);
     };
@@ -529,72 +568,52 @@ export default function Visualizer() {
                             </label>
                         </div>
                     </div>
-                    <label>
-                        Color Picker
-                        <input 
-                            type="color" 
-                            value={colorPalette} 
-                            onChange={handleColorChange} 
-                            style={{ marginLeft: "10px" }}
-                        />
-                    </label>
                     <div>
                         <label>
                             Bloom Strength:
                             <input 
-                            className ="ml-2"
-                            type="range"
-                            min="0"
-                            max="2"
-                            step="0.1"
-                            value={bloomStrength}
-                            onChange={(e) => setBloomStrength(parseFloat(e.target.value))}
+                                className="ml-2"
+                                type="range"
+                                min="0"
+                                max="1"
+                                step="0.1"
+                                value={bloomStrength}
+                                onChange={handleBloomStrengthChange} 
                             />
                         </label>
-                        </div>
-                        <div>
+                    </div>
+
+                    <div>
                         <label>
                             Bloom Radius:
                             <input
-                            className ="ml-2"
-                            type="range"
-                            min="0"
-                            max="2"
-                            step="0.1"
-                            value={bloomRadius}
-                            onChange={(e) => setBloomRadius(parseFloat(e.target.value))}
+                                className="ml-2"
+                                type="range"
+                                min="0"
+                                max="2"
+                                step="0.1"
+                                value={bloomRadius}
+                                onChange={handleBloomRadiusChange} 
                             />
                         </label>
-                        </div>
-                        <div>
+                    </div>
+
+                    <div>
                         <label>
                             Bloom Threshold:
                             <input
-                            className ="ml-2"
-                            type="range"
-                            min="0"
-                            max="1"
-                            step="0.05"
-                            value={bloomThreshold}
-                            onChange={(e) => setBloomThreshold(parseFloat(e.target.value))}
+                                className="ml-2"
+                                type="range"
+                                min="0"
+                                max="1"
+                                step="0.05"
+                                value={bloomThreshold}
+                                onChange={handleBloomThresholdChange} 
                             />
                         </label>
-                        </div>
-                        <div>
-                        <label>
-                            Scanline Opacity:
-                            <input
-                            className ="ml-2"
-                            type="range"
-                            min="0"
-                            max="1"
-                            step="0.05"
-                            value={scanlineOpacity}
-                            onChange={(e) => setScanlineOpacity(parseFloat(e.target.value))}
-                            />
-                        </label>
-                        </div>
+                    </div>
 
+                    
                     <button onClick={toggleSettingsPopup} style={{ marginTop: "20px" }}>
                         Close
                     </button>
