@@ -664,6 +664,94 @@ export default function Visualizer() {
                 <FaTimes />
             </button>
             <div ref={mountRef} className="absolute inset-0 w-full h-full"></div>
+
+            <div className="absolute top-12 flex flex-col items-center p-4 rounded-xl shadow-lg">
+                <button
+                    onClick={toggleSettingsPopup}
+                    className={`px-6 py-3 text-md font-bold rounded-md shadow-lg transition duration-300 text-white bg-orange-600 hover:bg-orange-700 active:scale-95 cursor-pointer"}`}>
+                    {"Setting"}
+                </button>
+            </div>
+
+            {isSettingsOpen && (
+                <div className="absolute top-26 m-4 p-4 gap-1 bg-orange-500 text-white rounded-xl z-20 flex flex-col">
+                    <div className="flex gap-5">
+                        <div>
+                            <label>
+                                Show Grid
+                                <input
+                                    className ="mr-2"
+                                    type="checkbox"
+                                    checked={isGridVisible}
+                                    onChange={handleGridToggle}
+                                />
+                            </label>
+                        </div>
+                        <div>
+                            <label>
+                                Show Faces
+                                <input
+                                    className ="mr-2"
+                                    type="checkbox"
+                                    checked={isFacesVisible}
+                                    onChange={handleFacesToggle}
+                                />
+                            </label>
+                        </div>
+                    </div>
+                    <div>
+                        <label>
+                            Bloom Strength:
+                            <input 
+                                className="ml-2"
+                                type="range"
+                                min="0"
+                                max="1"
+                                step="0.1"
+                                value={tempBloomStrength}
+                                onChange={handleBloomStrengthTempChange}
+                                onMouseUp={handleBloomStrengthChange}
+                            />
+                        </label>
+                    </div>
+
+                    <div>
+                        <label>
+                            Bloom Radius:
+                            <input
+                                className="ml-2"
+                                type="range"
+                                min="0"
+                                max="2"
+                                step="0.1"
+                                value={tempBloomRadius}
+                                onChange={handleBloomRadiusTempChange}
+                                onMouseUp={handleBloomRadiusChange}
+                            />
+                        </label>
+                    </div>
+
+                    <div>
+                        <label>
+                            Bloom Threshold:
+                            <input
+                                className="ml-2"
+                                type="range"
+                                min="0"
+                                max="1"
+                                step="0.05"
+                                value={tempBloomThreshold}
+                                onChange={handleBloomThresholdTempChange}
+                                onMouseUp={handleBloomThresholdChange}
+                            />
+                        </label>
+                    </div>
+
+                    <button onClick={toggleSettingsPopup} style={{ marginTop: "20px" }}>
+                        Close
+                    </button>
+                </div>
+            )}
         
             {showIntroModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black">
@@ -748,97 +836,8 @@ export default function Visualizer() {
                             >
                                 <FaForward />
                             </button>
-                            
-<!--                             <div className="absolute top-5 flex flex-col items-center p-4 rounded-xl shadow-lg">
-                    <button
-                        onClick={toggleSettingsPopup}
-                        className={`px-6 py-3 text-md font-bold rounded-md shadow-lg transition duration-300 "text-white bg-orange-600 hover:bg-orange-700 active:scale-95 cursor-pointer"}`}>
-                        {"Setting"}
-                    </button>
-                </div>
-
-                {isSettingsOpen && (
-                    <div className="absolute top-20 m-4 p-4 gap-1 bg-orange-500 text-white rounded-xl z-20 flex flex-col">
-                        <div className="flex gap-5">
-                            <div>
-                                <label>
-                                    <input
-                                        className ="mr-2"
-                                        type="checkbox"
-                                        checked={isGridVisible}
-                                        onChange={handleGridToggle}
-                                    />
-                                    Show Grid
-                                </label>
-                            </div>
-                            <div>
-                                <label>
-                                    <input
-                                        className ="mr-2"
-                                        type="checkbox"
-                                        checked={isFacesVisible}
-                                        onChange={handleFacesToggle}
-                                    />
-                                    Show Faces
-                                </label>
-                            </div>
-                        </div>
-                        <div>
-                            <label>
-                                Bloom Strength:
-                                <input 
-                                    className="ml-2"
-                                    type="range"
-                                    min="0"
-                                    max="1"
-                                    step="0.1"
-                                    value={tempBloomStrength}
-                                    onChange={handleBloomStrengthTempChange}
-                                    onMouseUp={handleBloomStrengthChange}
-                                />
-                            </label>
-                        </div>
-
-                        <div>
-                            <label>
-                                Bloom Radius:
-                                <input
-                                    className="ml-2"
-                                    type="range"
-                                    min="0"
-                                    max="2"
-                                    step="0.1"
-                                    value={tempBloomRadius}
-                                    onChange={handleBloomRadiusTempChange}
-                                    onMouseUp={handleBloomRadiusChange}
-                                />
-                            </label>
-                        </div>
-
-                        <div>
-                            <label>
-                                Bloom Threshold:
-                                <input
-                                    className="ml-2"
-                                    type="range"
-                                    min="0"
-                                    max="1"
-                                    step="0.05"
-                                    value={tempBloomThreshold}
-                                    onChange={handleBloomThresholdTempChange}
-                                    onMouseUp={handleBloomThresholdChange}
-                                />
-                            </label>
-                        </div>
-
-                        <button onClick={toggleSettingsPopup} style={{ marginTop: "20px" }}>
-                            Close
-                        </button>
-                    </div>
-                )} -->
                         </div>
                     </div>
-
                 )}
             </div>
         </div>
