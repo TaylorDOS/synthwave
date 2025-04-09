@@ -1,9 +1,5 @@
 "use client";
 
-// TODO: errors abt XYZ thing on console 
-// TODO: base grid and the grid on the plane conflict (only one at once)
-// TODO: more options?
-
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -37,16 +33,16 @@ export default function Visualizer() {
     const faceMaterial = new THREE.MeshBasicMaterial({ vertexColors: true });
     const gridRef = useRef<THREE.Mesh | null>(null);
     const facesRef = useRef<THREE.Mesh | null>(null);
-    let bloomStrengthValue = 0.3;
-    let bloomThresholdValue = 0.0;
-    let bloomRadiusValue = 0.2;
 
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [isGridVisible, setIsGridVisible] = useState(true);
     const [isFacesVisible, setIsFacesVisible] = useState(true);
-    const [bloomStrength, setBloomStrength] = useState(1);
-    const [bloomRadius, setBloomRadius] = useState(1);
-    const [bloomThreshold, setBloomThreshold] = useState(0.5);
+    let [bloomStrength, setBloomStrength] = useState(0.3);
+    const [tempBloomStrength, setTempBloomStrength] = useState(bloomStrength);
+    let [bloomRadius, setBloomRadius] = useState(0.2);
+    const [tempBloomRadius, setTempBloomRadius] = useState(bloomRadius);
+    let [bloomThreshold, setBloomThreshold] = useState(0.5);
+    const [tempBloomThreshold, setTempBloomThreshold] = useState(bloomThreshold);
 
     const [frequencyData, setFrequencyData] = useState<{ label: string; value: number }[]>([
         { label: "Sub-Bass", value: 0 },
@@ -79,6 +75,12 @@ export default function Visualizer() {
     }
 
     useEffect(() => {
+        let dataArray;
+        let subBass, bass, lowMid, mid, upperMid, treble, highTreble;
+        let renderer: THREE.WebGLRenderer | null = null;
+        let animationId: number | null = null;
+
+
         async function init() {
             if (!mountRef.current) return;
 
@@ -88,8 +90,22 @@ export default function Visualizer() {
                 return;
             }
 
+            if (renderer!) {
+                renderer.dispose();
+                renderer.forceContextLoss();
+                renderer = null;
+            }
+            
+
+            if (!bloomStrength || !bloomRadius || !bloomThreshold) {
+                setBloomStrength(0.3); 
+                setBloomRadius(0.2);
+                setBloomThreshold(0);
+            }
+
+
             // Set up Renderer
-            const renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setPixelRatio(window.devicePixelRatio);
             renderer.setSize(window.innerWidth, window.innerHeight);
             mountRef.current.appendChild(renderer.domElement);
@@ -116,7 +132,6 @@ export default function Visualizer() {
             const composer = new EffectComposer(renderer);
             const renderPass = new RenderPass(scene, camera);
             composer.addPass(renderPass);
-            console.log('this', composer,  renderPass)
 
             if (!bloomPassRef.current) {
                 const bloomPass = new UnrealBloomPass(
@@ -125,7 +140,7 @@ export default function Visualizer() {
                     bloomRadius, 
                     bloomThreshold
                   );
-                  bloomPassRef.current = bloomPass; // Store bloomPass reference
+                  bloomPassRef.current = bloomPass;
                   composer.addPass(bloomPass);
             } else {
                 // Update bloom effect dynamically
@@ -135,7 +150,7 @@ export default function Visualizer() {
             }
 
             const loader = new GLTFLoader();
-            loader.load("/models/palmTree.gltf", (gltf) => {
+            loader.load("/models/carModel.gltf", (gltf) => {
                 const model = gltf.scene;
                 // model.userData.initialPosition = new THREE.Vector3(-12, -1, 0);
                 model.userData.initialPosition = new THREE.Vector3(-0, -0, 25);
@@ -244,19 +259,19 @@ export default function Visualizer() {
             facesRef.current.visible = isFacesVisible;
 
             const animate = () => {
-                requestAnimationFrame(animate);
+                // requestAnimationFrame(animate);
 
                 if (analyserRef.current) {
-                    const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
+                    dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
                     analyserRef.current.getByteFrequencyData(dataArray);
 
-                    const subBass = averageFrequency(dataArray, 0, 1);
-                    const bass = averageFrequency(dataArray, 2, 4);
-                    const lowMid = averageFrequency(dataArray, 5, 8);
-                    const mid = averageFrequency(dataArray, 9, 14);
-                    const upperMid = averageFrequency(dataArray, 15, 19);
-                    const treble = averageFrequency(dataArray, 20, 24);
-                    const highTreble = averageFrequency(dataArray, 25, 31);
+                    subBass = averageFrequency(dataArray, 0, 1);
+                    bass = averageFrequency(dataArray, 2, 4);
+                    lowMid = averageFrequency(dataArray, 5, 8);
+                    mid = averageFrequency(dataArray, 9, 14);
+                    upperMid = averageFrequency(dataArray, 15, 19);
+                    treble = averageFrequency(dataArray, 20, 24);
+                    highTreble = averageFrequency(dataArray, 25, 31);
 
                     setFrequencyData([
                         { label: "Sub-Bass", value: subBass },
@@ -292,11 +307,11 @@ export default function Visualizer() {
                             0.04 // Increased interpolation speed (was 0.01, now 0.02)
                         );
 
-                        carRef.current.rotation.y = THREE.MathUtils.lerp(
-                            carRef.current.rotation.y,
-                            originalPos.y - subBass * 12 + bass * 8, // Car movement in x axis
-                            0.04 // Increased interpolation speed (was 0.01, now 0.02)
-                        );
+                        // carRef.current.rotation.y = THREE.MathUtils.lerp(
+                        //     carRef.current.rotation.y,
+                        //     originalPos.y - subBass * 12 + bass * 8, // Car movement in x axis
+                        //     0.04 // Increased interpolation speed (was 0.01, now 0.02)
+                        // );
                     }
                     
 
@@ -374,6 +389,17 @@ export default function Visualizer() {
                 //renderer.render(scene, camera);
                 controls.update();
                 composer.render();
+                animationId = requestAnimationFrame(animate);
+
+                return () => {   
+                    if (animationId !== null) cancelAnimationFrame(animationId);
+                    
+                    renderer!.dispose();
+                    renderer!.forceContextLoss();
+                    if (mountRef.current) {
+                        mountRef.current.removeChild(renderer!.domElement);
+                    }
+                };
             };
             animate();
 
@@ -385,20 +411,22 @@ export default function Visualizer() {
             const handleResize = () => {
                 const newAspectRatio = window.innerWidth / window.innerHeight;
                 camera.updateProjectionMatrix();
-                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer!.setSize(window.innerWidth, window.innerHeight);
             };
 
-            window.addEventListener("resize", handleResize);
+            window.addEventListener("resize", () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer!.setSize(window.innerWidth, window.innerHeight);
+                composer.setSize(window.innerWidth, window.innerHeight);
+            });
+            
 
             return () => {
                 window.removeEventListener("resize", handleResize);
-                mountRef.current?.removeChild(renderer.domElement);
+                mountRef.current?.removeChild(renderer!.domElement);
                 if (gridRef.current) scene.remove(gridRef.current);
                 if (facesRef.current) scene.remove(facesRef.current);
-
-                renderer.dispose();
-                renderer.forceContextLoss(); // Releases the WebGL context
-                document.body.removeChild(renderer.domElement);
             };
         }
 
@@ -487,21 +515,30 @@ export default function Visualizer() {
         }
     };
 
-    // Handle bloom settings
-    const handleBloomStrengthChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        setBloomStrength(parseFloat(e.target.value));
-        bloomStrengthValue = parseFloat(e.target.value);
-        
+    // Handle temporary changes
+    const handleBloomStrengthTempChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setTempBloomStrength(parseFloat(e.target.value));
     };
 
-    const handleBloomRadiusChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        setBloomRadius(parseFloat(e.target.value));
-        bloomRadiusValue = parseFloat(e.target.value);
+    const handleBloomRadiusTempChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setTempBloomRadius(parseFloat(e.target.value));
     };
 
-    const handleBloomThresholdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        setBloomThreshold(parseFloat(e.target.value));
-        bloomThresholdValue = parseFloat(e.target.value);
+    const handleBloomThresholdTempChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setTempBloomThreshold(parseFloat(e.target.value));
+    };
+
+    // Handle final changes (on mouse up)
+    const handleBloomStrengthChange = () => {
+        setBloomStrength(tempBloomStrength);
+    };
+
+    const handleBloomRadiusChange = () => {
+        setBloomRadius(tempBloomRadius);
+    };
+
+    const handleBloomThresholdChange = () => {
+        setBloomThreshold(tempBloomThreshold);
     };
 
     // Toggle settings popup
@@ -577,8 +614,9 @@ export default function Visualizer() {
                                 min="0"
                                 max="1"
                                 step="0.1"
-                                value={bloomStrength}
-                                onChange={handleBloomStrengthChange} 
+                                value={tempBloomStrength}
+                                onChange={handleBloomStrengthTempChange}
+                                onMouseUp={handleBloomStrengthChange}
                             />
                         </label>
                     </div>
@@ -592,8 +630,9 @@ export default function Visualizer() {
                                 min="0"
                                 max="2"
                                 step="0.1"
-                                value={bloomRadius}
-                                onChange={handleBloomRadiusChange} 
+                                value={tempBloomRadius}
+                                onChange={handleBloomRadiusTempChange}
+                                onMouseUp={handleBloomRadiusChange}
                             />
                         </label>
                     </div>
@@ -607,12 +646,12 @@ export default function Visualizer() {
                                 min="0"
                                 max="1"
                                 step="0.05"
-                                value={bloomThreshold}
-                                onChange={handleBloomThresholdChange} 
+                                value={tempBloomThreshold}
+                                onChange={handleBloomThresholdTempChange}
+                                onMouseUp={handleBloomThresholdChange}
                             />
                         </label>
                     </div>
-
                     
                     <button onClick={toggleSettingsPopup} style={{ marginTop: "20px" }}>
                         Close
