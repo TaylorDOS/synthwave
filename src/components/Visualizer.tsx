@@ -407,18 +407,14 @@ export default function Visualizer() {
 
           if (carRef.current) {
             const originalPos = carRef.current.userData.initialPosition;
-
-            /*carRef.current.position.z = THREE.MathUtils.lerp(
-              carRef.current.position.z,
-              originalPos.z - subBass * 12 + bass * 8, // Car movement in x axis
-              0.04 // Increased interpolation speed (was 0.01, now 0.02)
-            );*/
-            carRef.current.position.x = noise2D(0.5, t)*3;
+            
+            // add side-to-side noise
+            carRef.current.position.x = noise2D(t, t)*3;
             t += 0.005;
             
             carRef.current.position.z = THREE.MathUtils.lerp(
               carRef.current.position.z,
-              originalPos.z - (mid * 20 - 10), // Increased magnitude (was 10, now 20)
+              originalPos.z - (mid * 35 - 10), // Increased magnitude (was 10, now 20)
               0.02 // Increased interpolation speed (was 0.01, now 0.02)
             );
 
@@ -449,55 +445,6 @@ export default function Visualizer() {
 
               // Normalize Z value between 0 and 1
               const normalizedZ = THREE.MathUtils.clamp((z - minZ) / zRange, 0, 1);
-              /*
-              // Set HSL color (Blue -> Red Gradient)
-              const color = new THREE.Color();
-              if (y >= 45 || y <= -45) {
-                color.setRGB(0, 0, 0);
-                color.lerp(new THREE.Color(0, 0, 0), 0);
-
-                faceMaterial.opacity = 0;
-                wireframeMaterial.opacity = 0;
-              } else {
-                color.setHSL(0.7 - normalizedZ * 0.7, 1, 0.5); // Default gradient
-              }
-
-              colorAttr.setXYZ(i, color.r, color.g, color.b);
-
-              // Section-based movement logic
-              let heightOffset = 0;
-              const adjustedX = x + width / 3.2;
-              let col = adjustedX < width / 4 ? 0 : adjustedX < width / 4 + width / 8 ? 1 : 2;
-              const row = Math.floor((y + height / 2) / (height / 3));
-
-              const noiseFactor = noise2D(x * 0.1, y * 0.1 + performance.now() * 0.00005) * 0.3;
-
-              if (row === 2 && col !== 1) {
-                heightOffset = subBass + noiseFactor;
-              } else if (row === 1 && col !== 1) {
-                heightOffset = mid + noiseFactor;
-              } else if (row === 0 && col !== 1) {
-                heightOffset = highTreble + noiseFactor;
-              }
-
-              // Apply height change
-              const randomMovement = Math.random() * (row === 2 ? 16 : row === 1 ? 14 : 2);
-              z += (heightOffset * randomMovement - z) * interpolationSpeed;
-              position.setZ(i, z);
-
-              // Common -y direction movement
-              position.setY(i, y - 0.1);
-
-              // If y position goes below -50, reset to 50
-              if (position.getY(i) < -50) {
-                position.setY(i, 49.9);
-              }
-
-              if (position.getY(i) >= 47) {
-                position.setZ(i, 0);
-              }
-              */
-
 
               if (Math.abs(x) < width * roadProportion) {
                 // if it is in the road, make it transition smoother
