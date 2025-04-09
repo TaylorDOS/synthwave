@@ -26,6 +26,29 @@ export default function Visualizer() {
     const scanlineRef = useRef<THREE.Mesh | null>(null);
     const carRef = useRef<THREE.Object3D | null>(null);
     const noise2D = createNoise2D();
+    
+    const scene = new THREE.Scene();
+    // const bloomPass = new UnrealBloomPass(new THREE.Vector2(1024, 1024), 1.5, 0.4, 0.85);
+    const bloomPassRef = useRef<UnrealBloomPass | null>(null);
+    const geometry = new THREE.PlaneGeometry(100, 100, 50, 50);
+    const wireframeMaterial = new THREE.MeshBasicMaterial({ 
+        color: 0x000000, 
+        wireframe: true, 
+        wireframeLinewidth: 1 
+    });
+    const faceMaterial = new THREE.MeshBasicMaterial({ vertexColors: true });
+    const gridRef = useRef<THREE.Mesh | null>(null);
+    const facesRef = useRef<THREE.Mesh | null>(null);
+
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const [isGridVisible, setIsGridVisible] = useState(true);
+    const [isFacesVisible, setIsFacesVisible] = useState(true);
+    let [bloomStrength, setBloomStrength] = useState(0.3);
+    const [tempBloomStrength, setTempBloomStrength] = useState(bloomStrength);
+    let [bloomRadius, setBloomRadius] = useState(0.2);
+    const [tempBloomRadius, setTempBloomRadius] = useState(bloomRadius);
+    let [bloomThreshold, setBloomThreshold] = useState(0.5);
+    const [tempBloomThreshold, setTempBloomThreshold] = useState(bloomThreshold);
 
     const [frequencyData, setFrequencyData] = useState<{ label: string; value: number }[]>([
         { label: "Sub-Bass", value: 0 },
@@ -100,6 +123,12 @@ export default function Visualizer() {
     }, []);
 
     useEffect(() => {
+        let dataArray;
+        let subBass, bass, lowMid, mid, upperMid, treble, highTreble;
+        let renderer: THREE.WebGLRenderer | null = null;
+        let animationId: number | null = null;
+
+
         async function init() {
             if (!mountRef.current) return;
             const { vertexShader, fragmentShader } = await loadShaders();
@@ -108,9 +137,22 @@ export default function Visualizer() {
                 return;
             }
 
-            //setup
-            const scene = new THREE.Scene();
-            const renderer = new THREE.WebGLRenderer({ antialias: true });
+            if (renderer!) {
+                renderer.dispose();
+                renderer.forceContextLoss();
+                renderer = null;
+            }
+            
+
+            if (!bloomStrength || !bloomRadius || !bloomThreshold) {
+                setBloomStrength(0.3); 
+                setBloomRadius(0.2);
+                setBloomThreshold(0);
+            }
+
+
+            // Set up Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setPixelRatio(window.devicePixelRatio);
             renderer.setSize(window.innerWidth, window.innerHeight);
             mountRef.current.appendChild(renderer.domElement);
@@ -156,8 +198,13 @@ export default function Visualizer() {
             controls.enableDamping = true;
             controls.dampingFactor = 0.05;
             controls.rotateSpeed = 0.5;
-            controls.enableZoom = true;
-            controls.enablePan = true;
+            controls.enableZoom = true; // Allow zooming
+            controls.minDistance = 5; 
+            controls.maxDistance = 50;
+            controls.enablePan = true; // Allow panning (moving camera)
+
+            // controls.enableZoom = true;
+            // controls.enablePan = true;
             controls.maxPolarAngle = Math.PI / 2;
 
             // Add Lighting
@@ -172,17 +219,34 @@ export default function Visualizer() {
             const renderPass = new RenderPass(scene, camera);
             composer.addPass(renderPass);
 
-            const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
-            bloomPass.threshold = 0;
-            bloomPass.strength = 1.0;
-            bloomPass.radius = 0.5;
-            composer.addPass(bloomPass);
+            if (!bloomPassRef.current) {
+                const bloomPass = new UnrealBloomPass(
+                    new THREE.Vector2(window.innerWidth, window.innerHeight),
+                    bloomStrength, 
+                    bloomRadius, 
+                    bloomThreshold
+                  );
+                  bloomPassRef.current = bloomPass;
+                  composer.addPass(bloomPass);
+            } else {
+                // Update bloom effect dynamically
+                bloomPassRef.current.strength = bloomStrength;
+                bloomPassRef.current.radius = bloomRadius;
+                bloomPassRef.current.threshold = bloomThreshold;
+            }
+            // const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
+            // bloomPass.threshold = 0;
+            // bloomPass.strength = 1.0;
+            // bloomPass.radius = 0.5;
+            // composer.addPass(bloomPass);
 
             const loader = new GLTFLoader();
-            loader.load("/models/delorean.gltf", (gltf) => {
+            loader.load("/models/carModel.gltf", (gltf) => {
                 const model = gltf.scene;
-                model.userData.initialPosition = new THREE.Vector3(-12, -1, 0);
-                model.position.copy(model.userData.initialPosition);
+                // model.userData.initialPosition = new THREE.Vector3(-12, -1, 0);
+                model.userData.initialPosition = new THREE.Vector3(-0, -0, 25);
+                model.position.copy(model.userData.initialPosition); // Set initial position
+
                 //model.position.set(-12, -1, 0);
                 model.rotation.y = -Math.PI / 2;
                 model.scale.set(1, 1, 1);
@@ -195,23 +259,49 @@ export default function Visualizer() {
             // Plane settings
             const width = 100;
             const height = 100;
-            const widthSegments = 50;
-            const heightSegments = 50;
-            const geometry = new THREE.PlaneGeometry(width, height, widthSegments, heightSegments);
+            // const widthSegments = 50;
+            // const heightSegments = 50;
+            // const geometry = new THREE.PlaneGeometry(width, height, widthSegments, heightSegments);
 
-            // Set material to allow vertex colors
-            const material = new THREE.MeshBasicMaterial({ vertexColors: true, wireframe: true });
-            const plane = new THREE.Mesh(geometry, material);
-            plane.rotation.x = -Math.PI / 2;
-            scene.add(plane);
+            // Remove index to allow unique face colors
+            geometry.deleteAttribute("index");
 
-            // Initialize vertex colors
+            // Create color array for faces
             const colors = [];
-            const vertexCount = geometry.attributes.position.count;
-            for (let i = 0; i < vertexCount; i++) {
-                colors.push(0, 0, 0);
+            const faceCount = geometry.attributes.position.count / 3; // Each face has 3 vertices
+
+            for (let i = 0; i < faceCount; i++) {
+                const color = new THREE.Color(Math.random(), Math.random(), Math.random()); // Random color per face
+                for (let j = 0; j < 3; j++) {
+                    colors.push(color.r, color.g, color.b);
+                }
             }
-            geometry.setAttribute("color", new THREE.BufferAttribute(new Float32Array(colors), 3));
+
+            // // Apply face colors
+            // geometry.setAttribute("color", new THREE.BufferAttribute(new Float32Array(colors), 3));
+
+            // // Mesh for colored faces
+            // const planeWithColor = new THREE.Mesh(geometry, faceMaterial);
+            // planeWithColor.rotation.x = -Math.PI / 2;
+            // scene.add(planeWithColor); // Adds colored plane
+
+            // // Mesh for wireframe/grid lines
+            // const planeWireframe = new THREE.Mesh(geometry, wireframeMaterial);
+            // planeWireframe.rotation.x = -Math.PI / 2;
+            // scene.add(planeWireframe); // Adds colored grid
+
+            // // Initialize vertex colors
+            // const vertexCount = geometry.attributes.position.count;
+            // for (let i = 0; i < vertexCount; i++) {
+            //     colors.push(0, 0, 0);
+            // }
+            // geometry.setAttribute("color", new THREE.BufferAttribute(new Float32Array(colors), 3));
+
+            // // Uncomment this if wants colored grid only and comment adding colored plane code
+            // const material = new THREE.MeshBasicMaterial({ vertexColors: true, wireframe: true });
+            // const plane = new THREE.Mesh(geometry, material);
+            // plane.rotation.x = -Math.PI / 2;
+            // scene.add(plane);
 
             // SUN with scanned lines
             const circleGeometry = new THREE.PlaneGeometry(50, 50, 64, 64);
@@ -230,21 +320,45 @@ export default function Visualizer() {
             scanlineCircle.position.set(0, 0, -250);
             scene.add(scanlineCircle);
             scanlineRef.current = scanlineCircle;
+            
+            // Create the meshes if they don't exist yet
+            if (!gridRef.current) {
+                gridRef.current = new THREE.Mesh(geometry, wireframeMaterial);
+                gridRef.current.rotation.x = -Math.PI / 2;
+
+                const vertexCount = geometry.attributes.position.count;
+                for (let i = 0; i < vertexCount; i++) {
+                    colors.push(0, 0, 0);
+                }
+                geometry.setAttribute("color", new THREE.BufferAttribute(new Float32Array(colors), 3));
+                
+                scene.add(gridRef.current);
+            }
+
+            if (!facesRef.current) {
+                facesRef.current = new THREE.Mesh(geometry, faceMaterial);
+                facesRef.current.rotation.x = -Math.PI / 2;
+                scene.add(facesRef.current);
+            }
+
+            // Set initial visibility based on state
+            gridRef.current.visible = isGridVisible;
+            facesRef.current.visible = isFacesVisible;
 
             const animate = () => {
-                requestAnimationFrame(animate);
+                // requestAnimationFrame(animate);
 
                 if (analyserRef.current) {
-                    const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
+                    dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
                     analyserRef.current.getByteFrequencyData(dataArray);
 
-                    const subBass = averageFrequency(dataArray, 0, 1);
-                    const bass = averageFrequency(dataArray, 2, 4);
-                    const lowMid = averageFrequency(dataArray, 5, 8);
-                    const mid = averageFrequency(dataArray, 9, 14);
-                    const upperMid = averageFrequency(dataArray, 15, 19);
-                    const treble = averageFrequency(dataArray, 20, 24);
-                    const highTreble = averageFrequency(dataArray, 25, 31);
+                    subBass = averageFrequency(dataArray, 0, 1);
+                    bass = averageFrequency(dataArray, 2, 4);
+                    lowMid = averageFrequency(dataArray, 5, 8);
+                    mid = averageFrequency(dataArray, 9, 14);
+                    upperMid = averageFrequency(dataArray, 15, 19);
+                    treble = averageFrequency(dataArray, 20, 24);
+                    highTreble = averageFrequency(dataArray, 25, 31);
 
                     setFrequencyData([
                         { label: "Sub-Bass", value: subBass },
@@ -270,9 +384,21 @@ export default function Visualizer() {
 
                         carRef.current.position.x = THREE.MathUtils.lerp(
                             carRef.current.position.x,
-                            originalPos.x - (mid * 20 - 10), // Increased magnitude (was 10, now 20)
+                            originalPos.x - treble * 10 +  subBass * 5 , // Car movement in x axis
                             0.02 // Increased interpolation speed (was 0.01, now 0.02)
                         );
+
+                        carRef.current.position.z = THREE.MathUtils.lerp(
+                            carRef.current.position.z,
+                            originalPos.z - subBass * 12 + bass * 8, // Car movement in x axis
+                            0.04 // Increased interpolation speed (was 0.01, now 0.02)
+                        );
+
+                        // carRef.current.rotation.y = THREE.MathUtils.lerp(
+                        //     carRef.current.rotation.y,
+                        //     originalPos.y - subBass * 12 + bass * 8, // Car movement in x axis
+                        //     0.04 // Increased interpolation speed (was 0.01, now 0.02)
+                        // );
                     }
 
 
@@ -286,12 +412,21 @@ export default function Visualizer() {
 
                         // Set HSL color (Blue -> Red Gradient)
                         const color = new THREE.Color();
-                        color.setHSL(0.7 - normalizedZ * 0.7, 1, 0.5);
+                        if (y >= 45 || y <= -45 ) {
+                            color.setRGB(0, 0, 0); 
+                            color.lerp(new THREE.Color(0, 0, 0), 0);
+
+                            faceMaterial.opacity = 0;  
+                            wireframeMaterial.opacity = 0;
+                        } else {
+                            color.setHSL(0.7 - normalizedZ * 0.7, 1, 0.5); // Default gradient
+                        }
+                    
                         colorAttr.setXYZ(i, color.r, color.g, color.b);
 
                         // Section-based movement logic
                         let heightOffset = 0;
-                        const adjustedX = x + width / 3;
+                        const adjustedX = x + width / 3.2;
                         let col = adjustedX < width / 4 ? 0 : adjustedX < width / 4 + width / 8 ? 1 : 2;
                         const row = Math.floor((y + height / 2) / (height / 3));
 
@@ -315,7 +450,7 @@ export default function Visualizer() {
 
                         // If y position goes below -50, reset to 50
                         if (position.getY(i) < -50) {
-                            position.setY(i, 50);
+                            position.setY(i, 49.9);
                         }
 
                         if (position.getY(i) >= 47) {
@@ -343,6 +478,17 @@ export default function Visualizer() {
                 //renderer.render(scene, camera);
                 controls.update();
                 composer.render();
+                animationId = requestAnimationFrame(animate);
+
+                return () => {   
+                    if (animationId !== null) cancelAnimationFrame(animationId);
+                    
+                    renderer!.dispose();
+                    renderer!.forceContextLoss();
+                    if (mountRef.current) {
+                        mountRef.current.removeChild(renderer!.domElement);
+                    }
+                };
             };
             animate();
 
@@ -354,29 +500,35 @@ export default function Visualizer() {
             const handleResize = () => {
                 const newAspectRatio = window.innerWidth / window.innerHeight;
                 camera.updateProjectionMatrix();
-                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer!.setSize(window.innerWidth, window.innerHeight);
             };
 
-            window.addEventListener("resize", handleResize);
+            window.addEventListener("resize", () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer!.setSize(window.innerWidth, window.innerHeight);
+                composer.setSize(window.innerWidth, window.innerHeight);
+            });
+            
 
             return () => {
                 window.removeEventListener("resize", handleResize);
-                mountRef.current?.removeChild(renderer.domElement);
+                mountRef.current?.removeChild(renderer!.domElement);
+                if (gridRef.current) scene.remove(gridRef.current);
+                if (facesRef.current) scene.remove(facesRef.current);
             };
         }
 
         init();
-    }, []);
+    }, [bloomStrength, bloomRadius, bloomThreshold]);
 
-    // Handle Play/Pause Button Click
     const handlePlayPause = async () => {
         if (!audioRef.current || !audioFile) return;
 
         if (!audioContextRef.current) {
             audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
         }
-
-        await audioContextRef.current.resume(); // Resume audio context for autoplay restrictions
+        await audioContextRef.current.resume();
 
         if (isPlaying) {
             audioRef.current.pause();
@@ -388,9 +540,8 @@ export default function Visualizer() {
 
     const loadAudioFile = (file: File) => {
         setAudioFile(file);
-
         const objectURL = URL.createObjectURL(file);
-
+        
         if (!audioRef.current) {
             audioRef.current = new Audio();
             audioRef.current.crossOrigin = "anonymous";
@@ -399,7 +550,6 @@ export default function Visualizer() {
             audioRef.current.pause();
             audioRef.current.src = "";
         }
-
         audioRef.current.src = objectURL;
         audioRef.current.load();
 
@@ -449,6 +599,53 @@ export default function Visualizer() {
     const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
         event.preventDefault();
     };
+ 
+    // Toggle grid visibility
+    const handleGridToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setIsGridVisible(e.target.checked);
+        if (gridRef.current) {
+            gridRef.current.visible = e.target.checked;
+        }
+    };
+
+    // Toggle faces visibility
+    const handleFacesToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setIsFacesVisible(e.target.checked);
+        if (facesRef.current) {
+            facesRef.current.visible = e.target.checked;
+        }
+    };
+
+    // Handle temporary changes
+    const handleBloomStrengthTempChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setTempBloomStrength(parseFloat(e.target.value));
+    };
+
+    const handleBloomRadiusTempChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setTempBloomRadius(parseFloat(e.target.value));
+    };
+
+    const handleBloomThresholdTempChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setTempBloomThreshold(parseFloat(e.target.value));
+    };
+
+    // Handle final changes (on mouse up)
+    const handleBloomStrengthChange = () => {
+        setBloomStrength(tempBloomStrength);
+    };
+
+    const handleBloomRadiusChange = () => {
+        setBloomRadius(tempBloomRadius);
+    };
+
+    const handleBloomThresholdChange = () => {
+        setBloomThreshold(tempBloomThreshold);
+    };
+
+    // Toggle settings popup
+    const toggleSettingsPopup = (e: React.MouseEvent<HTMLButtonElement>) => {
+        setIsSettingsOpen((prev) => !prev);
+    };
 
     // Format time in MM:SS format
     const formatTime = (time: number) => {
@@ -467,7 +664,7 @@ export default function Visualizer() {
                 <FaTimes />
             </button>
             <div ref={mountRef} className="absolute inset-0 w-full h-full"></div>
-
+        
             {showIntroModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black">
                     <div className="relative text-center p-8 bg-gray-900 rounded-2xl shadow-[0_0_60px_#ec4899aa] max-w-lg w-full border-2 border-pink-500">
@@ -551,6 +748,94 @@ export default function Visualizer() {
                             >
                                 <FaForward />
                             </button>
+                            
+<!--                             <div className="absolute top-5 flex flex-col items-center p-4 rounded-xl shadow-lg">
+                    <button
+                        onClick={toggleSettingsPopup}
+                        className={`px-6 py-3 text-md font-bold rounded-md shadow-lg transition duration-300 "text-white bg-orange-600 hover:bg-orange-700 active:scale-95 cursor-pointer"}`}>
+                        {"Setting"}
+                    </button>
+                </div>
+
+                {isSettingsOpen && (
+                    <div className="absolute top-20 m-4 p-4 gap-1 bg-orange-500 text-white rounded-xl z-20 flex flex-col">
+                        <div className="flex gap-5">
+                            <div>
+                                <label>
+                                    <input
+                                        className ="mr-2"
+                                        type="checkbox"
+                                        checked={isGridVisible}
+                                        onChange={handleGridToggle}
+                                    />
+                                    Show Grid
+                                </label>
+                            </div>
+                            <div>
+                                <label>
+                                    <input
+                                        className ="mr-2"
+                                        type="checkbox"
+                                        checked={isFacesVisible}
+                                        onChange={handleFacesToggle}
+                                    />
+                                    Show Faces
+                                </label>
+                            </div>
+                        </div>
+                        <div>
+                            <label>
+                                Bloom Strength:
+                                <input 
+                                    className="ml-2"
+                                    type="range"
+                                    min="0"
+                                    max="1"
+                                    step="0.1"
+                                    value={tempBloomStrength}
+                                    onChange={handleBloomStrengthTempChange}
+                                    onMouseUp={handleBloomStrengthChange}
+                                />
+                            </label>
+                        </div>
+
+                        <div>
+                            <label>
+                                Bloom Radius:
+                                <input
+                                    className="ml-2"
+                                    type="range"
+                                    min="0"
+                                    max="2"
+                                    step="0.1"
+                                    value={tempBloomRadius}
+                                    onChange={handleBloomRadiusTempChange}
+                                    onMouseUp={handleBloomRadiusChange}
+                                />
+                            </label>
+                        </div>
+
+                        <div>
+                            <label>
+                                Bloom Threshold:
+                                <input
+                                    className="ml-2"
+                                    type="range"
+                                    min="0"
+                                    max="1"
+                                    step="0.05"
+                                    value={tempBloomThreshold}
+                                    onChange={handleBloomThresholdTempChange}
+                                    onMouseUp={handleBloomThresholdChange}
+                                />
+                            </label>
+                        </div>
+
+                        <button onClick={toggleSettingsPopup} style={{ marginTop: "20px" }}>
+                            Close
+                        </button>
+                    </div>
+                )} -->
                         </div>
                     </div>
 
