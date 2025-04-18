@@ -1,7 +1,6 @@
 "use client";
-
 import { useEffect, useRef, useState } from "react";
-import { FaPlay, FaPause, FaForward, FaBackward, FaMusic, FaTimes, FaUpload } from "react-icons/fa";
+import { FaPlay, FaPause, FaForward, FaBackward, FaMusic, FaTimes, FaUpload, FaCog } from "react-icons/fa";
 import * as THREE from "three";
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -11,12 +10,14 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { createNoise2D } from 'simplex-noise';
 
 export default function Visualizer() {
+  // UI Controls
   const [showControls, setShowControls] = useState(false);
   const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+
   const [showIntroModal, setShowIntroModal] = useState(true);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const mountRef = useRef<HTMLDivElement | null>(null);
@@ -24,17 +25,65 @@ export default function Visualizer() {
   const audioContextRef = useRef<AudioContext | null>(null);
   const sourceRef = useRef<MediaElementAudioSourceNode | null>(null);
   const scanlineRef = useRef<THREE.Mesh | null>(null);
-  const carRef = useRef<THREE.Object3D | null>(null);
   const noise2D = createNoise2D();
 
-  const scene = new THREE.Scene();
-  // const bloomPass = new UnrealBloomPass(new THREE.Vector2(1024, 1024), 1.5, 0.4, 0.85);
-  const bloomPassRef = useRef<UnrealBloomPass | null>(null);
+  const particleMaterialRef = useRef<THREE.PointsMaterial | null>(null);
+  const scanlineMaterialRef = useRef<THREE.ShaderMaterial | null>(null);
+  const sunColorRef = useRef<THREE.Color>(new THREE.Color(1.0, 0.2, 0.8));
+
+  const sunColors = [
+    new THREE.Color(1.0, 0.2, 0.8), // DeLorean: Pink
+    new THREE.Color(1.0, 0.5, 0.1), // Muscle: Orange
+    new THREE.Color(0.2, 1.0, 1.0), // Cyber: Cyan
+  ];
+
+  // car selector
+  const carRef = useRef<THREE.Object3D | null>(null);
+  const carPaths = [
+    "/models/delorean/scene.gltf",
+    "/models/muscle/scene.gltf",
+    "/models/modern/scene.gltf",
+  ];
+  const carScales = [
+    new THREE.Vector3(0.5, 0.5, 0.5),
+    new THREE.Vector3(0.5, 0.5, 0.5),
+    new THREE.Vector3(1, 1, 1),
+  ];
+  const carRotations = [
+    new THREE.Euler(0, -Math.PI / 2, 0),
+    new THREE.Euler(0, Math.PI, 0),
+    new THREE.Euler(0, Math.PI, 0),
+  ];
+  const colorThemeRef = useRef<{ hStart: number; hEnd: number }>({ hStart: 0.9, hEnd: 0.6 });
+  const carColorSettings = [
+    { hStart: 0.9, hEnd: 0.05 },
+    { hStart: 0.3, hEnd: 0.001 },
+    { hStart: 0.75, hEnd: 0.65 },
+  ];
+
+  const carParticleColors = [
+    new THREE.Color("#ff3cac"),
+    new THREE.Color("#ff8c00"),
+    new THREE.Color("#00e5ff"),
+  ];
+
+  const carBackgroundColors = [
+    0x1a002a, // DeLorean – purple twilight
+    0x2b0a00, // Muscle – sunset orange
+    0x001d2d, // Cyber – deep blue
+  ];
+
+  const carModels = useRef<THREE.Object3D[]>([]);
+  const loadedCars = useRef<boolean[]>([false, false, false]);
+  const [currentCarIndex, setCurrentCarIndex] = useState(0);
+
+  const sceneRef = useRef<THREE.Scene | null>(null);
+  const composerRef = useRef<EffectComposer | null>(null);
+
   const width = 100;
   const height = 100;
   const widthSegments = 50;
   const heightSegments = 50;
-  //const geometry = new THREE.PlaneGeometry(100, 100, 50, 50);
   const geometry = new THREE.PlaneGeometry(width, height, widthSegments, heightSegments);
   const wireframeMaterial = new THREE.MeshBasicMaterial({
     color: 0x000000,
@@ -48,12 +97,11 @@ export default function Visualizer() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isGridVisible, setIsGridVisible] = useState(true);
   const [isFacesVisible, setIsFacesVisible] = useState(true);
-  let [bloomStrength, setBloomStrength] = useState(0.3);
-  const [tempBloomStrength, setTempBloomStrength] = useState(bloomStrength);
-  let [bloomRadius, setBloomRadius] = useState(0.2);
-  const [tempBloomRadius, setTempBloomRadius] = useState(bloomRadius);
-  let [bloomThreshold, setBloomThreshold] = useState(0.5);
-  const [tempBloomThreshold, setTempBloomThreshold] = useState(bloomThreshold);
+
+  const bloomPassRef = useRef<UnrealBloomPass | null>(null);
+  const [bloomStrength, setBloomStrength] = useState(0);
+  const [bloomRadius, setBloomRadius] = useState(0);
+  const [bloomThreshold, setBloomThreshold] = useState(0);
 
   const [frequencyData, setFrequencyData] = useState<{ label: string; value: number }[]>([
     { label: "Sub-Bass", value: 0 },
@@ -146,6 +194,14 @@ export default function Visualizer() {
   }, []);
 
   useEffect(() => {
+    if (bloomPassRef.current) {
+      bloomPassRef.current.strength = bloomStrength;
+      bloomPassRef.current.radius = bloomRadius;
+      bloomPassRef.current.threshold = bloomThreshold;
+    }
+  }, [bloomStrength, bloomRadius, bloomThreshold]);
+
+  useEffect(() => {
     let dataArray;
     let subBass, bass, lowMid, mid, upperMid, treble, highTreble;
     let renderer: THREE.WebGLRenderer | null = null;
@@ -154,6 +210,7 @@ export default function Visualizer() {
 
     async function init() {
       if (!mountRef.current) return;
+
       const { vertexShader, fragmentShader } = await loadShaders();
       if (!vertexShader || !fragmentShader) {
         console.error("Shaders failed to load.");
@@ -166,16 +223,12 @@ export default function Visualizer() {
         renderer = null;
       }
 
-
-      if (!bloomStrength || !bloomRadius || !bloomThreshold) {
-        setBloomStrength(0.3);
-        setBloomRadius(0.2);
-        setBloomThreshold(0);
-      }
-
-
       // Set up Renderer
       renderer = new THREE.WebGLRenderer({ antialias: true });
+      if (!sceneRef.current) {
+        sceneRef.current = new THREE.Scene();
+      }
+      const scene = sceneRef.current;
       renderer.setPixelRatio(window.devicePixelRatio);
       renderer.setSize(window.innerWidth, window.innerHeight);
       mountRef.current.appendChild(renderer.domElement);
@@ -183,11 +236,9 @@ export default function Visualizer() {
       //particles system
       const textureLoader = new THREE.TextureLoader();
       const circleTexture = textureLoader.load('/texture/circle.png');
-
       const particleCount = 300;
       const particleGeometry = new THREE.BufferGeometry();
       const positions = [];
-
       for (let i = 0; i < particleCount; i++) {
         positions.push(
           (Math.random() - 0.5) * 200,
@@ -204,44 +255,40 @@ export default function Visualizer() {
         map: circleTexture,
         sizeAttenuation: true
       });
+      particleMaterialRef.current = particleMaterial;
 
       const particles = new THREE.Points(particleGeometry, particleMaterial);
       scene.add(particles);
 
-      //background of the stars
-      scene.background = new THREE.Color(0x0f0f1c);
-      renderer.setClearColor(new THREE.Color(0x0f0f1c), 1);
+      //Background Color
+      scene.background = new THREE.Color(carBackgroundColors[0]);
 
-      //camera setup
+      //Camera Settings
       const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
       camera.position.set(0, 20, 100);
 
-      //camera controls
+      //Light Settings
+      const light = new THREE.DirectionalLight(0xfff0e5, 5); // Cool bluish light
+      light.position.copy(camera.position).add(new THREE.Vector3(0, 0, 0));
+      light.target.position.set(0, 0, 0);
+      scene.add(light);
+      scene.add(light.target);
+
+      //Camera Movement
       const controls = new OrbitControls(camera, renderer.domElement);
-      controls.enableDamping = true;
       controls.dampingFactor = 0.05;
       controls.rotateSpeed = 0.5;
-      controls.enableZoom = true; // Allow zooming
       controls.minDistance = 5;
       controls.maxDistance = 50;
-      controls.enablePan = true; // Allow panning (moving camera)
-
-      // controls.enableZoom = true;
-      // controls.enablePan = true;
+      controls.enableDamping = true;
+      controls.enableZoom = true;
+      controls.enablePan = true;
       controls.maxPolarAngle = Math.PI / 2;
 
-      // Add Lighting
-      // const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
-      // scene.add(ambientLight);
-      const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
-      directionalLight.position.set(5, 10, 5);
-      scene.add(directionalLight);
-
-      //bloom effect setup
-      const composer = new EffectComposer(renderer);
-      const renderPass = new RenderPass(scene, camera);
-      composer.addPass(renderPass);
-
+      //Bloom Effect
+      composerRef.current = new EffectComposer(renderer);
+      const composer = composerRef.current;
+      composer.addPass(new RenderPass(scene, camera));
       if (!bloomPassRef.current) {
         const bloomPass = new UnrealBloomPass(
           new THREE.Vector2(window.innerWidth, window.innerHeight),
@@ -251,103 +298,63 @@ export default function Visualizer() {
         );
         bloomPassRef.current = bloomPass;
         composer.addPass(bloomPass);
-      } else {
-        // Update bloom effect dynamically
-        bloomPassRef.current.strength = bloomStrength;
-        bloomPassRef.current.radius = bloomRadius;
-        bloomPassRef.current.threshold = bloomThreshold;
       }
-      // const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
-      // bloomPass.threshold = 0;
-      // bloomPass.strength = 1.0;
-      // bloomPass.radius = 0.5;
-      // composer.addPass(bloomPass);
 
+      //Load Car Models
       const loader = new GLTFLoader();
-      loader.load("/models/carModel.gltf", (gltf) => {
-        const model = gltf.scene;
-        // model.userData.initialPosition = new THREE.Vector3(-12, -1, 0);
-        model.userData.initialPosition = new THREE.Vector3(-0, -0, 25);
-        model.position.copy(model.userData.initialPosition); // Set initial position
-
-        //model.position.set(-12, -1, 0);
-        model.rotation.y = -Math.PI / 2;
-        model.scale.set(1, 1, 1);
-        carRef.current = model;
-        scene.add(model);
-      }, undefined, (error) => {
-        console.error("Error loading DeLorean model:", error);
+      carPaths.forEach((path, index) => {
+        loader.load(
+          path,
+          (gltf) => {
+            const model = gltf.scene;
+            model.userData.initialPosition = new THREE.Vector3(0, 1, 0);
+            model.position.copy(model.userData.initialPosition);
+            model.rotation.copy(carRotations[index]);
+            model.scale.copy(carScales[index]);
+            carModels.current[index] = model;
+            if (!carRef.current && index === 0) {
+              scene.add(model);
+              carRef.current = model;
+            }
+            loadedCars.current[index] = true;
+          },
+          undefined,
+          (error) => {
+            console.error(`Error loading car model at ${path}:`, error);
+          }
+        );
       });
 
-      // Plane settings
-      const width = 100;
-      const height = 100;
-      // const widthSegments = 50;
-      // const heightSegments = 50;
-      // const geometry = new THREE.PlaneGeometry(width, height, widthSegments, heightSegments);
-
-      // Remove index to allow unique face colors
-      geometry.deleteAttribute("index");
-
-      // Create color array for faces
-      const colors = [];
-      const faceCount = geometry.attributes.position.count / 3; // Each face has 3 vertices
-
-      for (let i = 0; i < faceCount; i++) {
-        const color = new THREE.Color(Math.random(), Math.random(), Math.random()); // Random color per face
-        for (let j = 0; j < 3; j++) {
-          colors.push(color.r, color.g, color.b);
-        }
-      }
-
-      // // Apply face colors
-      // geometry.setAttribute("color", new THREE.BufferAttribute(new Float32Array(colors), 3));
-
-      // // Mesh for colored faces
-      // const planeWithColor = new THREE.Mesh(geometry, faceMaterial);
-      // planeWithColor.rotation.x = -Math.PI / 2;
-      // scene.add(planeWithColor); // Adds colored plane
-
-      // // Mesh for wireframe/grid lines
-      // const planeWireframe = new THREE.Mesh(geometry, wireframeMaterial);
-      // planeWireframe.rotation.x = -Math.PI / 2;
-      // scene.add(planeWireframe); // Adds colored grid
-
-      // // Initialize vertex colors
-      // const vertexCount = geometry.attributes.position.count;
-      // for (let i = 0; i < vertexCount; i++) {
-      //     colors.push(0, 0, 0);
-      // }
-      // geometry.setAttribute("color", new THREE.BufferAttribute(new Float32Array(colors), 3));
-
-      // // Uncomment this if wants colored grid only and comment adding colored plane code
-      // const material = new THREE.MeshBasicMaterial({ vertexColors: true, wireframe: true });
-      // const plane = new THREE.Mesh(geometry, material);
-      // plane.rotation.x = -Math.PI / 2;
-      // scene.add(plane);
-
-      // SUN with scanned lines
+      // Horizon Sun
       const circleGeometry = new THREE.PlaneGeometry(50, 50, 64, 64);
       const scanlineMaterial = new THREE.ShaderMaterial({
         uniforms: {
           time: { value: 0 },
           frequencyData: { value: 0 },
           randomOffset: { value: Math.random() * 10 },
-          baseColor: { value: new THREE.Color(1.0, 0.2, 0.8) }
+          baseColor: { value: new THREE.Color(sunColors[0]) }
         },
         vertexShader,
         fragmentShader,
         transparent: true
       });
+      scanlineMaterialRef.current = scanlineMaterial;
       const scanlineCircle = new THREE.Mesh(circleGeometry, scanlineMaterial);
       scanlineCircle.position.set(0, 0, -250);
       scene.add(scanlineCircle);
       scanlineRef.current = scanlineCircle;
 
+      // Plane
+      geometry.deleteAttribute("index");// Remove index to allow unique face colors
+
+      const colors = [];
+      const faceCount = geometry.attributes.position.count / 3; // Each face has 3 vertice
+
       // Create the meshes if they don't exist yet
       if (!gridRef.current) {
         gridRef.current = new THREE.Mesh(geometry, wireframeMaterial);
         gridRef.current.rotation.x = -Math.PI / 2;
+        gridRef.current.position.y = 0.05;
 
         const vertexCount = geometry.attributes.position.count;
         for (let i = 0; i < vertexCount; i++) {
@@ -407,11 +414,11 @@ export default function Visualizer() {
 
           if (carRef.current) {
             const originalPos = carRef.current.userData.initialPosition;
-            
+
             // add side-to-side noise
-            carRef.current.position.x = noise2D(t, t)*3;
+            carRef.current.position.x = noise2D(t, t) * 3;
             t += 0.005;
-            
+
             carRef.current.position.z = THREE.MathUtils.lerp(
               carRef.current.position.z,
               originalPos.z - (mid * 35 - 10), // Increased magnitude (was 10, now 20)
@@ -474,8 +481,10 @@ export default function Visualizer() {
               position.setZ(i, z);
 
               // Set HSL color (Blue -> Red Gradient)
+              const { hStart, hEnd } = colorThemeRef.current;
+              const hue = THREE.MathUtils.lerp(hStart, hEnd, normalizedZ);
               const color = new THREE.Color();
-              color.setHSL(0.7 - normalizedZ * 0.7, 1, 0.5);
+              color.setHSL(hue, 1, 0.5);
               colorAttr.setXYZ(i, color.r, color.g, color.b);
 
               // Common -y direction movement
@@ -504,11 +513,11 @@ export default function Visualizer() {
 
           // Update scanline effect
           if (scanlineRef.current) {
-            scanlineMaterial.uniforms.frequencyData.value = highTreble;
+            scanlineMaterial.uniforms.frequencyData.value = mid;
             scanlineMaterial.uniforms.time.value += 0.05;
 
             // Scale the plane dynamically with frequency
-            let scaleFactor = 1 + highTreble * 0.1;
+            let scaleFactor = 1 + mid * 0.2;
             scanlineRef.current.scale.set(scaleFactor, scaleFactor, 1);
           }
         }
@@ -553,14 +562,26 @@ export default function Visualizer() {
 
       return () => {
         window.removeEventListener("resize", handleResize);
-        mountRef.current?.removeChild(renderer!.domElement);
+
+        // Dispose renderer safely
+        renderer?.dispose();
+        renderer?.forceContextLoss();
+
+        // Dispose composer
+        composerRef.current?.dispose(); // Add this line
+
+        // Clean up DOM
+        if (mountRef.current && renderer?.domElement) {
+          mountRef.current.removeChild(renderer.domElement);
+        }
+
+        // Remove custom meshes from the scene
         if (gridRef.current) scene.remove(gridRef.current);
         if (facesRef.current) scene.remove(facesRef.current);
       };
     }
-
     init();
-  }, [bloomStrength, bloomRadius, bloomThreshold]);
+  }, []);
 
   const handlePlayPause = async () => {
     if (!audioRef.current || !audioFile) return;
@@ -650,36 +671,25 @@ export default function Visualizer() {
 
   // Toggle faces visibility
   const handleFacesToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setIsFacesVisible(e.target.checked);
+    const visible = e.target.checked;
+    setIsFacesVisible(visible);
+
     if (facesRef.current) {
-      facesRef.current.visible = e.target.checked;
+      facesRef.current.visible = visible;
     }
-  };
 
-  // Handle temporary changes
-  const handleBloomStrengthTempChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setTempBloomStrength(parseFloat(e.target.value));
-  };
+    if (gridRef.current) {
+      const sunColor = sunColorRef.current.clone();
 
-  const handleBloomRadiusTempChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setTempBloomRadius(parseFloat(e.target.value));
-  };
-
-  const handleBloomThresholdTempChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setTempBloomThreshold(parseFloat(e.target.value));
-  };
-
-  // Handle final changes (on mouse up)
-  const handleBloomStrengthChange = () => {
-    setBloomStrength(tempBloomStrength);
-  };
-
-  const handleBloomRadiusChange = () => {
-    setBloomRadius(tempBloomRadius);
-  };
-
-  const handleBloomThresholdChange = () => {
-    setBloomThreshold(tempBloomThreshold);
+      gridRef.current.material = visible
+        ? new THREE.MeshBasicMaterial({ color: 0x000000, wireframe: true })
+        : new THREE.MeshBasicMaterial({
+          color: sunColor,
+          wireframe: true,
+          transparent: true,
+          opacity: 0.7,
+        });
+    }
   };
 
   // Toggle settings popup
@@ -694,6 +704,37 @@ export default function Visualizer() {
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
+  const switchCar = (index: number) => {
+    const scene = sceneRef.current;
+    if (!scene || !loadedCars.current[index]) {
+      console.warn(`Car model at index ${index} is not loaded yet or scene not initialized.`);
+      return;
+    }
+    scene.background = new THREE.Color(carBackgroundColors[index]);
+
+    // Remove previous car and detach the light
+    if (carRef.current) {
+      scene.remove(carRef.current);
+    }
+
+    if (particleMaterialRef.current) {
+      particleMaterialRef.current.color.set(carParticleColors[index]);
+    }
+
+    if (scanlineMaterialRef.current) {
+      scanlineMaterialRef.current.uniforms.baseColor.value = sunColors[index];
+    }
+    sunColorRef.current = sunColors[index];
+
+    const newCar = carModels.current[index];
+    if (newCar) {
+      scene.add(newCar);
+      carRef.current = newCar;
+      setCurrentCarIndex(index);
+      colorThemeRef.current = carColorSettings[index];
+    }
+  };
+
   return (
     <div className="w-screen h-screen relative" onDragOver={handleDragOver} onDrop={handleDrop}>
       <button
@@ -705,91 +746,111 @@ export default function Visualizer() {
       </button>
       <div ref={mountRef} className="absolute inset-0 w-full h-full"></div>
 
-      <div className="absolute top-12 flex flex-col items-center p-4 rounded-xl shadow-lg">
+      <div className="absolute top-12 flex flex-col items-center p-4">
         <button
           onClick={toggleSettingsPopup}
-          className={`px-6 py-3 text-md font-bold rounded-md shadow-lg transition duration-300 text-white bg-orange-600 hover:bg-orange-700 active:scale-95 cursor-pointer"}`}>
-          {"Setting"}
+          className={`p-3 text-white rounded-full shadow-lg transition duration-300 ${isSettingsOpen
+            ? "bg-gray-400 cursor-not-allowed"
+            : "bg-gray-600 hover:bg-pink-700 active:scale-95 hover:scale-110"
+            }`}
+          title="Settings"
+          disabled={isSettingsOpen}
+        >
+          <FaCog className="text-xl" />
         </button>
       </div>
 
       {isSettingsOpen && (
-        <div className="absolute top-26 m-4 p-4 gap-1 bg-orange-500 text-white rounded-xl z-20 flex flex-col">
-          <div className="flex gap-5">
-            <div>
-              <label>
-                Show Grid
-                <input
-                  className="mr-2"
-                  type="checkbox"
-                  checked={isGridVisible}
-                  onChange={handleGridToggle}
-                />
-              </label>
-            </div>
-            <div>
-              <label>
-                Show Faces
-                <input
-                  className="mr-2"
-                  type="checkbox"
-                  checked={isFacesVisible}
-                  onChange={handleFacesToggle}
-                />
-              </label>
-            </div>
+        <div className="absolute top-32 left-4 p-6 bg-gray-900 text-white rounded-2xl z-20 shadow-2xl border border-pink-500 max-w-xs w-full">
+          {/* Close Button */}
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-bold text-pink-400">Settings</h3>
+            <button
+              onClick={toggleSettingsPopup}
+              className="text-white hover:text-pink-500 transition duration-300"
+              title="Close Settings"
+            >
+              <FaTimes />
+            </button>
           </div>
-          <div>
-            <label>
-              Bloom Strength:
+
+          {/* Toggles */}
+          <div className="flex flex-col gap-3 mb-4">
+            <label className="flex items-center justify-between">
+              <span>Show Grid</span>
               <input
-                className="ml-2"
-                type="range"
-                min="0"
-                max="1"
-                step="0.1"
-                value={tempBloomStrength}
-                onChange={handleBloomStrengthTempChange}
-                onMouseUp={handleBloomStrengthChange}
+                type="checkbox"
+                checked={isGridVisible}
+                onChange={handleGridToggle}
+                className="accent-pink-500 w-4 h-4"
+              />
+            </label>
+            <label className="flex items-center justify-between">
+              <span>Show Faces</span>
+              <input
+                type="checkbox"
+                checked={isFacesVisible}
+                onChange={handleFacesToggle}
+                className="accent-pink-500 w-4 h-4"
               />
             </label>
           </div>
 
-          <div>
+          {/* Sliders */}
+          <div className="flex flex-col gap-4 mb-4 text-sm">
+            <label>
+              Bloom Strength:
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.1"
+                value={bloomStrength}
+                onChange={(e) => setBloomStrength(parseFloat(e.target.value))}
+                className="w-full accent-pink-500 mt-1"
+              />
+            </label>
             <label>
               Bloom Radius:
               <input
-                className="ml-2"
                 type="range"
                 min="0"
                 max="2"
                 step="0.1"
-                value={tempBloomRadius}
-                onChange={handleBloomRadiusTempChange}
-                onMouseUp={handleBloomRadiusChange}
+                value={bloomRadius}
+                onChange={(e) => setBloomRadius(parseFloat(e.target.value))}
+                className="w-full accent-pink-500 mt-1"
               />
             </label>
-          </div>
-
-          <div>
             <label>
               Bloom Threshold:
               <input
-                className="ml-2"
                 type="range"
                 min="0"
                 max="1"
                 step="0.05"
-                value={tempBloomThreshold}
-                onChange={handleBloomThresholdTempChange}
-                onMouseUp={handleBloomThresholdChange}
+                value={bloomThreshold}
+                onChange={(e) => setBloomThreshold(parseFloat(e.target.value))}
+                className="w-full accent-pink-500 mt-1"
               />
             </label>
           </div>
 
-          <button onClick={toggleSettingsPopup} style={{ marginTop: "20px" }}>
-            Close
-          </button>
+          {/* Car Switcher */}
+          <div className="grid grid-cols-3 gap-2">
+            {["DeLorean", "Muscle", "Cyber"].map((label, i) => (
+              <button
+                key={label}
+                onClick={() => switchCar(i)}
+                className={`text-xs p-2 rounded shadow-md transition duration-300 ${currentCarIndex === i
+                    ? "bg-pink-700 text-white"
+                    : "bg-gray-700 text-gray-300 hover:bg-pink-600 hover:text-white"
+                  }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
