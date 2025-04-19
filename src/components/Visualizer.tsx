@@ -97,6 +97,8 @@ export default function Visualizer() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isGridVisible, setIsGridVisible] = useState(true);
   const [isFacesVisible, setIsFacesVisible] = useState(true);
+  const [isAutoDrive, setIsAutoDrive] = useState(true);
+  const isAutoDriveRef = useRef(isAutoDrive);
 
   const bloomPassRef = useRef<UnrealBloomPass | null>(null);
   const [bloomStrength, setBloomStrength] = useState(0);
@@ -202,12 +204,15 @@ export default function Visualizer() {
   }, [bloomStrength, bloomRadius, bloomThreshold]);
 
   useEffect(() => {
+    isAutoDriveRef.current = isAutoDrive;
+  }, [isAutoDrive]);  
+
+  useEffect(() => {
     let dataArray;
     let subBass, bass, lowMid, mid, upperMid, treble, highTreble;
     let renderer: THREE.WebGLRenderer | null = null;
     let animationId: number | null = null;
-
-
+    
     async function init() {
       if (!mountRef.current) return;
 
@@ -375,7 +380,7 @@ export default function Visualizer() {
       facesRef.current.visible = isFacesVisible;
 
       const animate = () => {
-        // requestAnimationFrame(animate);
+        
 
         if (analyserRef.current) {
           dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
@@ -406,36 +411,60 @@ export default function Visualizer() {
           const maxZ = 10;
           const zRange = maxZ - minZ;
 
-          // fraction of the width that will become the road
-          const roadProportion = 1 / 12;
-
           if (carRef.current) {
-            const originalPos = carRef.current.userData.initialPosition;
+            const car = carRef.current;
 
-            // add side-to-side noise
-            carRef.current.position.x = noise2D(t, t) * 3;
-            t += 0.005;
+            if (!isAutoDriveRef.current)
+            {
+              // Manual mode
+              const speed = 0.2;
+              t += 0.005;
 
-            carRef.current.position.z = THREE.MathUtils.lerp(
-              carRef.current.position.z,
-              originalPos.z - (mid * 35 - 10), // Increased magnitude (was 10, now 20)
-              0.02 // Increased interpolation speed (was 0.01, now 0.02)
-            );
+              // Forward movement via LERP or WASD
+              let forward = 0;
+              let sideways = 0;
+              let up = 0;
 
-            // update camera to follow car
-            controls.target.set(
-              (carRef.current.position.x),
-              (carRef.current.position.y),
-              carRef.current.position.z
-            );
+              if (keys.current.q) up += 1;
+              if (keys.current.e) up -= 1;
+              if (keys.current.w) forward += 1;
+              if (keys.current.s) forward -= 1;
+              if (keys.current.a) sideways -= 1;
+              if (keys.current.d) sideways += 1;
 
-            // carRef.current.rotation.y = THREE.MathUtils.lerp(
-            //     carRef.current.rotation.y,
-            //     originalPos.y - subBass * 12 + bass * 8, // Car movement in x axis
-            //     0.04 // Increased interpolation speed (was 0.01, now 0.02)
-            // );
+              // Move car 
+              let newY = car.position.y + up * speed;
+              let newZ = car.position.z - forward * speed;
+              let newX = car.position.x + sideways * speed;
+              if ( -40 < newZ && newZ < 40 && -5 < newX && newX < 5 && 0 < newY && newY < 30)
+              {
+                car.position.x += sideways * speed;
+                car.position.y += up * speed;
+                car.position.z -= forward * speed;
+              }
+            }
+            else
+            {
+              // Auto-drive mode
+              const originalPos = carRef.current.userData.initialPosition;
+
+              // add side-to-side noise
+              carRef.current.position.x = noise2D(t, t) * 3;
+              t += 0.005;
+
+              carRef.current.position.z = THREE.MathUtils.lerp(
+                carRef.current.position.z,
+                originalPos.z - (mid * 35 - 10), // Increased magnitude (was 10, now 20)
+                0.02 // Increased interpolation speed (was 0.01, now 0.02)
+              );
+            }
+
+            // Camera follows
+            controls.target.set(car.position.x, car.position.y, car.position.z);
           }
 
+          // fraction of the width that will become the road
+          const roadProportion = 1 / 12;
 
           // xIdx, yIdx is position of the point in the grid
           // of points
@@ -449,13 +478,6 @@ export default function Visualizer() {
 
               // Normalize Z value between 0 and 1
               const normalizedZ = THREE.MathUtils.clamp((z - minZ) / zRange, 0, 1);
-
-              if (Math.abs(x) < width * roadProportion) {
-                // if it is in the road, make it transition smoother
-                z = Math.exp(0.8 * (Math.abs(x) - width * roadProportion));
-              } else {
-                z = 1;
-              }
 
               //// Set z heights
               // use noise grid (2d grid) to map onto the points
@@ -471,7 +493,8 @@ export default function Visualizer() {
               z *= Math.max(sinHeight, 0.5);
               // if it is in the road, make it close to 0 but transition smoother
               if (Math.abs(x) < width * roadProportion) {
-                z *= Math.exp(0.8 * (Math.abs(x) - width * roadProportion));
+                z *= Math.exp(0.8 * (Math.abs(x) - width * roadProportion)) + 0.05;
+                // console.log(z)
               }
               z *= 5;
 
@@ -521,7 +544,6 @@ export default function Visualizer() {
 
         particles.rotation.y += 0.0005;
 
-        //renderer.render(scene, camera);
         controls.update();
         composer.render();
         animationId = requestAnimationFrame(animate);
@@ -556,7 +578,6 @@ export default function Visualizer() {
         composer.setSize(window.innerWidth, window.innerHeight);
       });
 
-
       return () => {
         window.removeEventListener("resize", handleResize);
 
@@ -579,6 +600,44 @@ export default function Visualizer() {
     }
     init();
   }, []);
+
+  const validKeys = ['q', 'e', 'w', 'a', 's', 'd'] as const;
+  type Key = typeof validKeys[number];
+
+  const keys = useRef<Record<Key, boolean>>({
+    q: false,
+    e: false,
+    w: false,
+    a: false,
+    s: false,
+    d: false,
+  });
+
+  useEffect(() => {
+    const downHandler = (e: KeyboardEvent) => {
+      const key = e.key.toLowerCase() as Key;
+      if (validKeys.includes(key)) {
+        keys.current[key] = true;
+      }
+    };
+
+    const upHandler = (e: KeyboardEvent) => {
+      const key = e.key.toLowerCase() as Key;
+      if (validKeys.includes(key)) {
+        keys.current[key] = false;
+      }
+    };
+
+    window.addEventListener('keydown', downHandler);
+    window.addEventListener('keyup', upHandler);
+  
+    return () => {
+      window.removeEventListener('keydown', downHandler);
+      window.removeEventListener('keyup', upHandler);
+    };
+  }, []);
+  
+  
 
   const handlePlayPause = async () => {
     if (!audioRef.current || !audioFile) return;
@@ -723,7 +782,11 @@ export default function Visualizer() {
       }
     }
   };
-  
+
+  // Toggle auto drive
+  const handleAutoDrive = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setIsAutoDrive(e.target.checked);
+  };
 
   // Toggle settings popup
   const toggleSettingsPopup = (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -809,6 +872,18 @@ export default function Visualizer() {
 
           {/* Toggles */}
           <div className="flex flex-col gap-3 mb-4">
+            <div>
+              <label className="flex items-center justify-between">
+                <span>Auto Drive</span>
+                <input
+                  type="checkbox"
+                  checked={isAutoDrive}
+                  onChange={handleAutoDrive}
+                  className="accent-pink-500 w-4 h-4"
+                />
+              </label>
+              <div className='text-sm text-gray-400'>Q: vertical up | E: vertical down | W: forward | S: backward | A: left | D: right</div>
+            </div>
             <label className="flex items-center justify-between">
               <span>Show Grid</span>
               <input
