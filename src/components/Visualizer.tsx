@@ -54,7 +54,7 @@ export default function Visualizer() {
     new THREE.Euler(0, Math.PI, 0),
     new THREE.Euler(0, Math.PI, 0),
   ];
-  const colorThemeRef = useRef<{ hStart: number; hEnd: number }>({ hStart: 0.9, hEnd: 0.6 });
+  const colorThemeRef = useRef<{ hStart: number; hEnd: number }>({ hStart: 0.9, hEnd: 0.05 });
   const carColorSettings = [
     { hStart: 0.9, hEnd: 0.05 },
     { hStart: 0.3, hEnd: 0.001 },
