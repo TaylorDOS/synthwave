@@ -101,7 +101,7 @@ export default function Visualizer() {
   const bloomPassRef = useRef<UnrealBloomPass | null>(null);
   const [bloomStrength, setBloomStrength] = useState(0);
   const [bloomRadius, setBloomRadius] = useState(0);
-  const [bloomThreshold, setBloomThreshold] = useState(0);
+  const [bloomThreshold] = useState(0);
 
   const [frequencyData, setFrequencyData] = useState<{ label: string; value: number }[]>([
     { label: "Sub-Bass", value: 0 },
@@ -348,7 +348,6 @@ export default function Visualizer() {
       geometry.deleteAttribute("index");// Remove index to allow unique face colors
 
       const colors = [];
-      const faceCount = geometry.attributes.position.count / 3; // Each face has 3 vertice
 
       // Create the meshes if they don't exist yet
       if (!gridRef.current) {
@@ -406,8 +405,6 @@ export default function Visualizer() {
           const minZ = 0;
           const maxZ = 10;
           const zRange = maxZ - minZ;
-
-          const interpolationSpeed = 0.03;
 
           // fraction of the width that will become the road
           const roadProportion = 1 / 12;
@@ -673,24 +670,60 @@ export default function Visualizer() {
   const handleFacesToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
     const visible = e.target.checked;
     setIsFacesVisible(visible);
-
+  
     if (facesRef.current) {
       facesRef.current.visible = visible;
     }
-
+  
     if (gridRef.current) {
-      const sunColor = sunColorRef.current.clone();
-
-      gridRef.current.material = visible
-        ? new THREE.MeshBasicMaterial({ color: 0x000000, wireframe: true })
-        : new THREE.MeshBasicMaterial({
-          color: sunColor,
+      const geometry = gridRef.current.geometry as THREE.BufferGeometry;
+      const position = geometry.attributes.position;
+      const minZ = 0;
+      const maxZ = 10;
+      const zRange = maxZ - minZ;
+  
+      if (!geometry.attributes.color) {
+        const count = position.count;
+        const colors = new Float32Array(count * 3); // r, g, b per vertex
+        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      }
+  
+      const colorAttr = geometry.attributes.color as THREE.BufferAttribute;
+  
+      if (visible) {
+        gridRef.current.material = new THREE.MeshBasicMaterial({
+          color: 0x000000,
+          wireframe: true,
+        });
+      } else {
+        // Update vertex colors based on height
+        for (let xIdx = 0; xIdx < widthSegments + 1; xIdx++) {
+          for (let yIdx = 0; yIdx < heightSegments + 1; yIdx++) {
+            const i = xIdx + yIdx * (heightSegments + 1);
+            const z = position.getZ(i);
+  
+            const normalizedZ = THREE.MathUtils.clamp((z - minZ) / zRange, 0, 1);
+            const { hStart, hEnd } = colorThemeRef.current;
+            const hue = THREE.MathUtils.lerp(hStart, hEnd, normalizedZ);
+  
+            const color = new THREE.Color();
+            color.setHSL(hue, 1, 0.5);
+            colorAttr.setXYZ(i, color.r, color.g, color.b);
+          }
+        }
+  
+        colorAttr.needsUpdate = true;
+  
+        gridRef.current.material = new THREE.MeshBasicMaterial({
+          vertexColors: true,
           wireframe: true,
           transparent: true,
           opacity: 0.7,
         });
+      }
     }
   };
+  
 
   // Toggle settings popup
   const toggleSettingsPopup = (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -819,18 +852,6 @@ export default function Visualizer() {
                 step="0.1"
                 value={bloomRadius}
                 onChange={(e) => setBloomRadius(parseFloat(e.target.value))}
-                className="w-full accent-pink-500 mt-1"
-              />
-            </label>
-            <label>
-              Bloom Threshold:
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.05"
-                value={bloomThreshold}
-                onChange={(e) => setBloomThreshold(parseFloat(e.target.value))}
                 className="w-full accent-pink-500 mt-1"
               />
             </label>
