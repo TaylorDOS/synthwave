@@ -1,36 +1,69 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Synthwave Music Visualizer
 
-## Getting Started
+An interactive, browser-based music visualizer built with **Three.js**, **React**, and the **Web Audio API**, designed to capture the nostalgic energy of synthwave. Upload your favorite track and watch the scene come alive with neon terrain, retro-futuristic cars, and pulsing visuals—all synced in real time to your music.
 
-First, run the development server:
+**Live Demo**: [synthwave-rosy.vercel.app](https://synthwave-rosy.vercel.app/)
+
+## Features
+
+- Real-time audio analysis with Web Audio API
+- Reactive terrain, lighting, and environment based on music
+- Switchable car themes: DeLorean, Muscle, and Cyber
+- Shader-powered synthwave sun and animated particles
+- Post-processing bloom and camera tracking
+- Minimal music player with playback controls and auto-hide UI
+
+## Themes & Background Colors
+
+Each theme sets its own unique synthwave tone:
+
+- **DeLorean** – Purple Twilight: `#1a002a`
+- **Muscle** – Sunset Orange: `#2b0a00`
+- **Cyber** – Deep Blue: `#001d2d`
+
+## Tech Stack
+
+- [Three.js](https://threejs.org/docs/) – 3D rendering
+- [React](https://reactjs.org/) + [Next.js](https://nextjs.org/) – Web framework
+- [Web Audio API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API) – Real-time audio analysis
+- GLSL Shaders – Custom visual effects
+- Tailwind CSS – Styling
+
+## Setup
 
 ```bash
+# Clone the repo
+git clone https://github.com/your-username/synthwave-visualizer.git
+cd synthwave-visualizer
+
+# Install dependencies
+npm install
+
+# Start the development server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Folder Structure
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```
+/public         # Static assets (models, audio, images)
+\components     # React UI components
+\lib            # Utility functions
+\shaders        # GLSL shader files
+\pages          # Next.js routing
+\styles         # Tailwind CSS config
+```
 
-## Learn More
+## Screenshots
 
-To learn more about Next.js, take a look at the following resources:
+![Demo 1](images/synthwave-1.png)
+![Demo 2](images/synthwave-2.png)
+![Demo 3](images/synthwave-3.png)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Credits
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+3D Models from [Sketchfab](https://sketchfab.com/):  
+- DeLorean by JellyFighter  
+- Dodge Challenger by SDC PERFORMANCE  
+- Classic Muscle Car by Lexyc16  
